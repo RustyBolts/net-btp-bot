@@ -147,7 +147,8 @@ class GridStrategyTrade {
             fibonacciLevels
         } = strategy.determineTradeAction(log, prices, currentPrice, this.entryPrice[symbol], options);
         if (record.stock[quoteSymbol][baseSymbol].calm) {
-            console.log('CALM');
+            log('======= CALM =======');
+            trackType = 'calm';
         }
         else if (action === 'GAZE') {
             log('[', action, ']', symbol);
@@ -205,9 +206,7 @@ class GridStrategyTrade {
         if (trackType === 'ticket') {
             setTimeout(() => this.tracking(), delaySec * 1000);
         } else if (trackType === 'strategy') {
-            console.log('record.stock[quoteSymbol][baseSymbol].calm:', record.stock[quoteSymbol][baseSymbol].calm);
-            if (record.stock[quoteSymbol][baseSymbol].calm === false)
-                this.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, gazeDelayMins);
+            this.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, gazeDelayMins);
         }
     }
 
