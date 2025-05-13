@@ -89,7 +89,7 @@ class GridStrategyTrade {
     }
 
     funds(baseSymbol, quoteSymbol) {
-        return record.funds({ baseSymbol, quoteSymbol });
+        return record.getFunds({ baseSymbol, quoteSymbol });
     }
 
     prefit(onlySell, baseSymbol, quoteSymbol) {
@@ -130,7 +130,7 @@ class GridStrategyTrade {
 
         const runningTime = this.runningTime[symbol] * 60 * 1000;
         this.runningTime[symbol] += gazeDelayMins;
-
+console.log(symbol, 'runningTime:', runningTime);
         // 輸入秒數，轉成時分秒
         const timeStr = new Date(runningTime).toISOString().substring(11, 19);
         log(symbol, this.onlySell[symbol] ? '====ONLY_SELL====' : '================ 已運行', timeStr);
@@ -207,6 +207,8 @@ class GridStrategyTrade {
             setTimeout(() => this.tracking(), delaySec * 1000);
         } else if (trackType === 'strategy') {
             this.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, gazeDelayMins);
+        } else if (trackType === 'calm') {
+            this.delayStrategyTracking(baseSymbol, quoteSymbol, 3600, 0);
         }
     }
 
