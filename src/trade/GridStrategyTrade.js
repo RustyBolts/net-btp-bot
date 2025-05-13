@@ -92,7 +92,7 @@ class GridStrategyTrade {
         return record.getFunds({ baseSymbol, quoteSymbol });
     }
 
-    prefit(onlySell, baseSymbol, quoteSymbol) {
+    profit(onlySell, baseSymbol, quoteSymbol) {
         record.setProfit(onlySell, baseSymbol, quoteSymbol);
 
         const symbol = `${baseSymbol}${quoteSymbol}`;

@@ -88,7 +88,7 @@ class GridTrading extends StrategyProxy {
                 return;
             }
 
-            trade.prefit(onlySell, baseSymbol, quoteSymbol);
+            trade.profit(onlySell, baseSymbol, quoteSymbol);
         }
 
         // todo profitRate 設定，在最後交易時檢查並決定是否賣出讓最後一單止盈獲利
