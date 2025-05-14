@@ -75,7 +75,7 @@ class TradingStrategy {
         const trend = trendChecker.checkTrend(prices, currentPrice, bollingerBands, rsi, smaTrend, emaTrend, macdSignal, fibonacciLevels);
 
         log(trend, '趨勢 |', divergence, '背離');
-        log('RSI:', rsi, '| PB:', percentB);
+        log(`RSI(${Math.abs(rsiHigh - rsi) > Math.abs(rsi - rsiLow) ? rsiLow : rsiHigh}):`, rsi, '| PB:', percentB.toFixed(8));
         log(this.getPriceLevel(bollingerBands, fibonacciLevels, currentPrice, entryPrice).join('\n'));
 
         let action = 'HOLD';

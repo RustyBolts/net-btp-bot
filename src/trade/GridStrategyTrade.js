@@ -131,13 +131,13 @@ class GridStrategyTrade {
         const rsiHigh = this.rsi[symbol]?.high || 60;
         const rsiLow = this.rsi[symbol]?.low || 40;
 
-        const runningTime = this.runningTime[symbol] * 60 * 1000;
         this.runningTime[symbol] += gazeDelayMins;
-        console.log(symbol, 'gazeDelayMins:', gazeDelayMins);
+        const runningTime = this.runningTime[symbol] * 60 * 1000;
+        // console.log(symbol, 'gazeDelayMins:', gazeDelayMins, '/', this.runningTime[symbol]);
 
         // 輸入秒數，轉成時分秒
         const timeStr = new Date(runningTime).toISOString().substring(11, 19);
-        log(symbol, this.onlySell[symbol] ? `===ONLY_SELL===${rsiHigh}` : `=====H${rsiHigh}==L${rsiLow}==== 已運行`, timeStr);
+        log(symbol, this.onlySell[symbol] ? '====ONLY_SELL====' : `================= 已運行`, timeStr);
 
         gazeDelayMins = this.klineDelayMins;
 
@@ -153,6 +153,7 @@ class GridStrategyTrade {
         if (record.stock[quoteSymbol][baseSymbol].calm) {
             log('======= CALM =======');
             trackType = 'calm';
+            gazeDelayMins = 60;// 延遲60分鐘更新kline
         }
         else if (action === 'GAZE') {
             log('[', action, ']', symbol);
@@ -212,11 +213,11 @@ class GridStrategyTrade {
         } else if (trackType === 'strategy') {
             this.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, gazeDelayMins);
         } else if (trackType === 'calm') {
-            this.delayStrategyTracking(baseSymbol, quoteSymbol, 3600, 0);
+            this.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, gazeDelayMins);
         }
     }
 
-    delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, gazeDelayMins = 1) {
+    delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, gazeDelayMins) {
         const symbol = `${baseSymbol}${quoteSymbol}`;
         this.clearTrackingIntervalTimeout(symbol);
         this.trackingInterval[symbol] = setTimeout(() => {
