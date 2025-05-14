@@ -18,6 +18,7 @@ class TelegramCryptoBot {
         this.stop();
         this.tracking();
         this.ip();
+        this.rsi();
 
         this.strategyProxy.notifyCallback = (message) => {
             Object.keys(this.loginedPlayers).forEach(chatId => {
@@ -300,6 +301,73 @@ class TelegramCryptoBot {
                         bot.sendMessage(chatId, `Error occurred: ${error}`);
                     });
             }
+        });
+    }
+
+    rsi() {
+        const cmd = '/rsi';
+        bot.onText(cmd, (msg) => {
+            const chatId = msg.chat.id;
+
+            let message = 'RSI 調整回傳訊息:';
+            if (this.loginedPlayers[chatId]) {
+                const split = msg.text.split(' ');
+                const cryptoSymbol = split[1];
+                if (cryptoSymbol && cryptoSymbol !== 'all') {
+                    const assets = this.strategyProxy.query();
+                    const symbol = `${cryptoSymbol.toUpperCase()}USDT`;
+                    console.log(symbol, assets[symbol]);
+                    if (!assets[symbol]) {
+                        return bot.sendMessage(chatId, '策略中無此交易對加入');
+                    }
+
+                    const values = split[2].split('-');
+                    if (values.length === 2) {
+                        const high = parseInt(values[0], 10);
+                        const low = parseInt(values[1], 10);
+                        if (typeof high === 'number' && typeof low === 'number') {
+                            if (high < low) {
+                                message = `RSI 輸入順序為 {high}-{low}, high不可低於low`;
+                            } else {
+                                this.strategyProxy.rsi(cryptoSymbol.toUpperCase(), 'USDT', high, low);
+                                message = `調整交易RSI - ${symbol}: HIGH ${high} LOW ${low}`;
+                            }
+                        } else {
+                            message = `輸入 /rsi ${cryptoSymbol} ${high}-${low}\n錯誤, 需要數字`;
+                        }
+
+                    } else {
+                        message = '輸入格式為 /rsi {symbol} {high}-{low}';
+                    }
+                } else if (cryptoSymbol === 'all') {
+                    bot.sendMessage(chatId, '調整交易RSI : 所有代幣');
+
+                    const values = split[2].split('-');
+                    if (values.length === 2) {
+                        const high = parseInt(values[0], 10);
+                        const low = parseInt(values[1], 10);
+                        if (typeof high === 'number' && typeof low === 'number') {
+                            if (high < low) {
+                                message = `RSI 輸入順序為 {high}-{low}, high不可低於low`;
+                            } else {
+                                this.strategyProxy.rsi('', '', high, low);
+                                message = `調整交易RSI - 所有交易對: HIGH ${high} LOW ${low}`;
+                            }
+                        } else {
+                            message = `輸入 /rsi ${high}-${low}\n錯誤, 需要數字`;
+                        }
+
+                    } else {
+                        message = '輸入格式為 /rsi {high}-{low}';
+                    }
+                } else {
+                    bot.sendMessage(chatId, '請輸入代幣類別');
+                }
+
+            } else {
+                message = '未完成身份驗證';
+            }
+            bot.sendMessage(chatId, message);
         });
     }
 }

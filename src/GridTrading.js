@@ -62,7 +62,7 @@ class GridTrading extends StrategyProxy {
             trade.entryPrice[symbol] = avgPrice;
 
             trade.calm(false, baseSymbol, quoteSymbol);
-            trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.5);
+            trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.5, 0);
         }
     }
 
@@ -143,9 +143,26 @@ class GridTrading extends StrategyProxy {
      * @param {number} rsiHigh 
      * @param {number} rsiLow 
      */
-    rsi(baseSymbol, quoteSymbol, rsiHigh = 70, rsiLow = 30) {
-        const symbol = `${baseSymbol}${quoteSymbol}`;
-        trade.rsi[symbol] = { high: rsiHigh, low: rsiLow };
+    rsi(baseSymbol = '', quoteSymbol = '', rsiHigh = 70, rsiLow = 30) {
+        if (rsiHigh < 50 || rsiLow > 50) {
+            console.log('暫不處理high, low 互換', rsiHigh, rsiLow);
+            return;
+        }
+
+        if (baseSymbol === '' || quoteSymbol === '') {
+            const stock = trade.stock();
+            Object.keys(stock).forEach((quote) => {
+                Object.keys(stock[quote]).forEach(async (base) => {
+                    const symbol = `${base}${quote}`;
+                    trade.rsi[symbol] = { high: rsiHigh, low: rsiLow };
+                    // console.log(symbol, rsiHigh, rsiLow);
+                });
+            });
+        } else {
+            const symbol = `${baseSymbol}${quoteSymbol}`;
+            trade.rsi[symbol] = { high: rsiHigh, low: rsiLow };
+            // console.log(symbol, rsiHigh, rsiLow);
+        }
     }
 
     /**
@@ -178,7 +195,7 @@ class GridTrading extends StrategyProxy {
 
         const delaySec = 0.5;
         this.fill(baseSymbol, quoteSymbol, funds);
-        trade.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec);
+        trade.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, 0);
 
         // const fs = require('fs');
         // fs.writeFileSync(`./logs/spot-${symbol}-stdout.log`, 'first update');
@@ -239,7 +256,7 @@ class GridTrading extends StrategyProxy {
                         trade.resetRunningTime(symbol);
                         trade.entryPrice[symbol] = 0;
 
-                        trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1 + i);
+                        trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1 + i, 0);
                     }
                     return;
                 }
@@ -260,7 +277,7 @@ class GridTrading extends StrategyProxy {
                         const stockFunds = stocks[quoteSymbol][baseSymbol].funds;
                         logger.log(baseSymbol, quoteSymbol, baseSymbol, quoteSymbol, '資金:', stockFunds);
 
-                        trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.5 + i);
+                        trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.5 + i, 0);
                     } else {
                         logger.log(baseSymbol, quoteSymbol, orderId, '未知訂單', orderStatus);
                     }

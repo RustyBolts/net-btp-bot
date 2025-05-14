@@ -74,7 +74,7 @@ class GridStrategyTrade {
         this.onlySell = {};// 只做賣的交易對
     }
 
-    clam(pause, baseSymbol = '', quoteSymbol = '') {
+    calm(pause, baseSymbol = '', quoteSymbol = '') {
         record.setCalm(pause, baseSymbol, quoteSymbol);
     }
 
@@ -128,17 +128,21 @@ class GridStrategyTrade {
         const prices = await this.getKlines(symbol);
         const currentPrice = prices[prices.length - 1];
 
+        const rsiHigh = this.rsi[symbol]?.high || 60;
+        const rsiLow = this.rsi[symbol]?.low || 40;
+
         const runningTime = this.runningTime[symbol] * 60 * 1000;
         this.runningTime[symbol] += gazeDelayMins;
-console.log(symbol, 'runningTime:', runningTime);
+        console.log(symbol, 'gazeDelayMins:', gazeDelayMins);
+
         // 輸入秒數，轉成時分秒
         const timeStr = new Date(runningTime).toISOString().substring(11, 19);
-        log(symbol, this.onlySell[symbol] ? '====ONLY_SELL====' : '================ 已運行', timeStr);
+        log(symbol, this.onlySell[symbol] ? `===ONLY_SELL===${rsiHigh}` : `=====H${rsiHigh}==L${rsiLow}==== 已運行`, timeStr);
 
         gazeDelayMins = this.klineDelayMins;
 
         var trackType = 'strategy';
-        const options = { rsiLow: 40, rsiHigh: 60, maxLossPercentage: 0.3 };
+        const options = { rsiLow, rsiHigh, maxLossPercentage: 0.3 };
         const {
             action,
             trend,
@@ -313,7 +317,7 @@ console.log(symbol, 'runningTime:', runningTime);
                 this.recordOrder(baseSymbol, quoteSymbol, orderTicket, precision);
 
                 // 開始追蹤交易倉位
-                this.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1);
+                this.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1, 0);
 
                 delete fillingOrders[orderId];
                 logger.log(baseSymbol, quoteSymbol, orderId, '完成買入，改追蹤交易倉位');
