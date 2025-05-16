@@ -151,7 +151,7 @@ class GridStrategyTrade {
             fibonacciLevels
         } = strategy.determineTradeAction(log, prices, currentPrice, this.entryPrice[symbol], options);
         if (record.stock[quoteSymbol][baseSymbol].calm) {
-            log('======= CALM =======');
+            log('[ CALM ', action, ']', symbol, 'XXXX');
             trackType = 'calm';
             gazeDelayMins = 60;// 延遲60分鐘更新kline
         }
