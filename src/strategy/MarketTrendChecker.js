@@ -46,7 +46,7 @@ class MarketTrendChecker {
     checkFibonacciLevels(currentPrice, fibonacciLevels) {
         // console.log('斐波那契位置:', fibonacciLevels);
         for (const [level, value] of Object.entries(fibonacciLevels)) {
-            if (Math.abs(currentPrice - value) / value <= 0.05) {
+            if (Math.abs(currentPrice - value) / value <= 0.01) {
                 const percent = parseFloat(level);
                 if (currentPrice <= value && percent <= 50.0) { // 支撐位
                     // console.log('支撐位:', level, value);
