@@ -67,8 +67,6 @@ class TradingStrategy {
 
         // log('SMA:', smaTrend, 'EMA:', emaTrend, 'MACD:', macdSignal.histogram.toFixed(8));
 
-        prices = prices.slice(prices.length - macdOptions.fastPeriod, prices.length);// 取後 smaPeriod 筆，用在斐波那契通道計算
-
         // 趨勢分析
         const rsi = RSI[RSI.length - 1];
         const fibonacciLevels = calculate.fibonacciLevels(prices);

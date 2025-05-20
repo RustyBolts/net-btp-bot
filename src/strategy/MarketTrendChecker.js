@@ -46,14 +46,13 @@ class MarketTrendChecker {
     checkFibonacciLevels(currentPrice, fibonacciLevels) {
         // console.log('斐波那契位置:', fibonacciLevels);
         for (const [level, value] of Object.entries(fibonacciLevels)) {
-            if (Math.abs(currentPrice - value) / value <= 0.01) { // 接近 1% 範圍內
-                // if (currentPrice <= value && parseFloat(level) <= 23.6) { // 支撐位
-                if (parseFloat(level) <= 23.6) { // 支撐位
+            if (Math.abs(currentPrice - value) / value <= 0.05) {
+                const percent = parseFloat(level);
+                if (currentPrice <= value && percent <= 50.0) { // 支撐位
                     // console.log('支撐位:', level, value);
                     return 'NEAR_SUPPORT';
                 }
-                // if (currentPrice >= value && parseFloat(level) >= 76.4) { // 壓力位
-                if (parseFloat(level) >= 76.4) { // 壓力位
+                if (currentPrice >= value && percent >= 50.0) { // 壓力位
                     // console.log('壓力位:', level, value);
                     return 'NEAR_RESISTANCE';
                 }
