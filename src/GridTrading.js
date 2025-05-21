@@ -197,9 +197,6 @@ class GridTrading extends StrategyProxy {
         this.fill(baseSymbol, quoteSymbol, funds);
         trade.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, 0);
 
-        // const fs = require('fs');
-        // fs.writeFileSync(`./logs/spot-${symbol}-stdout.log`, 'first update');
-
         await new Promise(resolve => setTimeout(resolve, delaySec));
     }
 

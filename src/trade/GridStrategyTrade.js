@@ -71,6 +71,8 @@ class GridStrategyTrade {
         this.klineRefreshCountMax = DelayMins[this.klineInverval];
         this.runningTime = {};
 
+        this.maxLossPercentage = 0.06;// 最大損失比例
+
         this.onlySell = {};// 只做賣的交易對
     }
 
@@ -142,7 +144,7 @@ class GridStrategyTrade {
         gazeDelayMins = this.klineDelayMins;
 
         var trackType = 'strategy';
-        const options = { rsiLow, rsiHigh, maxLossPercentage: 0.3 };
+        const options = { rsiLow, rsiHigh, maxLossPercentage: this.maxLossPercentage };
         const {
             action,
             trend,
@@ -276,28 +278,13 @@ class GridStrategyTrade {
             if (last && entryPrice) {
                 const diff = currentPrice - entryPrice;
                 const percentage = diff / entryPrice;
+                if (percentage <= -this.maxLossPercentage) return true;
 
                 const hours = last / (60 * 60 * 1000);
-                if (hours > 264) {
-                    stopLoss = percentage > -0.02;
-                } else if (hours > 240) {
-                    stopLoss = percentage > -0.015;
-                } else if (hours > 216) {
-                    stopLoss = percentage > -0.01;
-                } else if (hours > 192) {
-                    stopLoss = percentage > -0.005;
-                } else if (hours > 168) {
-                    stopLoss = percentage > 0.001;
-                } else if (hours > 144) {
-                    stopLoss = percentage > 0.003;
-                } else if (hours > 120) {
-                    stopLoss = percentage > 0.005;
-                } else if (hours > 96) {
-                    stopLoss = percentage > 0.007;
-                } else if (hours > 72) {
-                    stopLoss = percentage > 0.015;
-                } else if (hours > 48) {
-                    stopLoss = percentage > 0.02;
+                let i = 18;
+                for (; i > 0; i--) {
+                    if (hours > i * 4) stopLoss = percentage > 0.03 - 0.005 * i;
+                    if (stopLoss) break;
                 }
                 stopLoss && log(hours, '止損');
             }
