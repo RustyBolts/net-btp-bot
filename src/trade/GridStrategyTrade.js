@@ -163,7 +163,7 @@ class GridStrategyTrade {
         }
         else if (
             action === 'STOP_LOSS'
-            || (action === 'DOWNTREND' && this.checkEerlyStopLoss(baseSymbol, quoteSymbol, currentPrice))
+            || (action === 'DOWN_TREND' && this.checkEerlyStopLoss(baseSymbol, quoteSymbol, currentPrice))
         ) {
             log('[', action, ']', symbol, '止損出清流程');
             trackType = await this.sell(baseSymbol, quoteSymbol);
@@ -176,11 +176,11 @@ class GridStrategyTrade {
             log('[', action, ']', symbol);
             trackType = await this.sell(baseSymbol, quoteSymbol);
         }
-        else if (action === 'BUY' || action === 'SUPPLY' || action === 'BUCKET') {
+        else if (action === 'BUY' || action === 'SUPPLY') {
             const step = {
                 'BUY': 0.95,
                 'SUPPLY': 0.9,
-                'BUCKET': 0.5,
+                // 'BUCKET': 0.5,
             };
             const divide = 5;
             const precision = await getSymbolPrecision(symbol);
@@ -189,6 +189,13 @@ class GridStrategyTrade {
             // log('修正數量:', quantity - precision.stepSize);
             log('[', action, ']', quantity, baseSymbol);
             trackType = await this.buy(baseSymbol, quoteSymbol, quantity, currentPrice, step[action]);
+        }
+        else if (action === 'OVER_BOUGHT' || action === 'BUCKET') {
+            log('[', action, ']', symbol);
+
+            // 機器人通知
+            this.notify(`${action} ${symbol} ，手動做單提醒!`);
+            gazeDelayMins = DelayMins[Interval.MINUTES_05];
         }
         else {
             log('[', action, ']', symbol, '>>>');

@@ -82,18 +82,30 @@ class TradingStrategy {
             log('觸發認賠結算');
         }
         else if (rsi > rsiHigh) {
-            if (entryPrice > 0 && entryPrice < currentPrice) {
-                if (trend === 'RESISTANCE' || trend === 'OVERBOUGHT') {
+            if (entryPrice > 0) {
+                action = 'HODL';
+
+                if (trend === 'DOWNTREND') {
+                    // 下跌趨勢，及時止盈止損
+                    action = 'DOWN_TREND';
+                }
+                else if (trend === 'RESISTANCE') {
                     if ((currentPrice - entryPrice) / entryPrice > 0.05) {
                         action = 'SELL';
                     } else {
                         action = 'GAZE';
                     }
-                } else if (trend === 'UPTREND' && percentB > 1.2) {
-                    if (rsi > 75) {
-                        action = 'SELL';// 超常上漲，及時止盈
-                    } else {
-                        action = 'GAZE';
+                }
+                else if (entryPrice < currentPrice) {
+                    if (trend === 'OVERBOUGHT') {
+                        action = 'OVER_BOUGHT';
+                    }
+                    else if (trend === 'UPTREND' && percentB > 1.2) {
+                        if (rsi > 75) {
+                            action = 'OVER_BOUGHT';
+                        } else {
+                            action = 'GAZE';
+                        }
                     }
                 }
             }
@@ -101,7 +113,8 @@ class TradingStrategy {
         else if (rsi < rsiLow) {
             if (trend === 'SUPPORT') {
                 action = 'BUY';
-            } else if (trend === 'DOWNTREND' && rsi < 30) {
+            }
+            else if (trend === 'DOWNTREND' && rsi < 30) {
                 if (entryPrice === 0 && rsi > 25) {
                     if (lowerBand > currentPrice) {
                         action = 'BUCKET';
@@ -109,12 +122,6 @@ class TradingStrategy {
                         action = 'GAZE';
                     }
                 }
-            }
-        }
-        else if (percentB < 0.5 && trend === 'DOWNTREND') {
-            // 下跌趨勢，及時止盈止損
-            if (entryPrice > 0) {
-                action = 'DOWNTREND';
             }
         }
         return { action, trend, rsi, bollingerBands, fibonacciLevels };
