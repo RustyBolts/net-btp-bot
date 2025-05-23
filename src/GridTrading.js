@@ -1,11 +1,13 @@
 const { getSymbolPrecision, getExchangeInfo } = require("./trade/ExchangeInfo");
 const StrategyProxy = require("./StrategyProxy");
 const SpotLogger = require("./record/SpotLogger");
-const GridStrategyTrade = require("./trade/GridStrategyTrade");
 const SpotTrade = require("./trade/SpotTrade");
+const GridStrategyTrade = require("./trade/GridStrategyTrade");
+const MarketTicket = require("./trade/MarketTicket");
 const logger = new SpotLogger();
 const spot = new SpotTrade();
 const trade = new GridStrategyTrade();
+const ticket = new MarketTicket();
 
 class GridTrading extends StrategyProxy {
     constructor() {
@@ -263,8 +265,6 @@ class GridTrading extends StrategyProxy {
                     const orderStatus = tickets[orderId].status;
                     if (orderStatus === 'NEW' || orderStatus === 'PARTIALLY_FILLED') {
                         fillingOrders.push({ [orderId]: [baseSymbol, quoteSymbol] });
-
-                        trade.delayTicketTracking(fillingOrders, 0.5);
                     } else if (orderStatus === 'FILLED') {
                         const avgPrice = await trade.resultBidTicket(baseSymbol, quoteSymbol, false);
 
@@ -281,6 +281,10 @@ class GridTrading extends StrategyProxy {
                 });
             });
         });
+
+        if (fillingOrders.length > 0) {
+            ticket.delayTicketTracking(fillingOrders, 0.5, trade.newTracking.bind(trade));
+        }
 
         this.notify('追蹤網格交易策略...');
     }

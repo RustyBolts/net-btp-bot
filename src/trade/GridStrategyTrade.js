@@ -60,7 +60,6 @@ const DelayMins = {
 class GridStrategyTrade {
     constructor() {
         this.trackingInterval = {};
-        this.ticketInterval = 0;
         this.entryPrice = {};
 
         this.rsi = {};
@@ -115,6 +114,21 @@ class GridStrategyTrade {
             calm: false,
         });
         this.logcat(baseSymbol, quoteSymbol);
+    }
+
+    /**
+     * 下訂單後未完成，執行追蹤訂單後完成，進入交易追蹤流程
+     * @param {string} baseSymbol 
+     * @param {string} quoteSymbol 
+     * @param {object} orderTicket 
+     * @param {number} precision 
+     */
+    newTracking(baseSymbol, quoteSymbol, orderTicket, precision) {
+        // 變更交易訂單紀錄
+        this.recordOrder(baseSymbol, quoteSymbol, orderTicket, precision);
+
+        // 開始追蹤交易倉位
+        this.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1, 0);
     }
 
     /**
@@ -297,45 +311,6 @@ class GridStrategyTrade {
             }
         }
         return stopLoss;
-    }
-
-    // 追蹤訂單
-    async ticketTracking(fillingOrders) {
-        // 檢查未完成訂單是否處理完成
-        Object.keys(fillingOrders).forEach(async (orderId) => {
-            const [baseSymbol, quoteSymbol] = fillingOrders[orderId];
-            const symbol = `${baseSymbol}${quoteSymbol}`;
-            const orderTicket = await spot.getOrder(symbol, orderId);
-            const orderStatus = orderTicket.status;
-            if (orderStatus === 'FILLED') {
-                const precision = await getSymbolPrecision(symbol);
-                this.recordOrder(baseSymbol, quoteSymbol, orderTicket, precision);
-
-                // 開始追蹤交易倉位
-                this.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1, 0);
-
-                delete fillingOrders[orderId];
-                logger.log(baseSymbol, quoteSymbol, orderId, '完成買入，改追蹤交易倉位');
-            } else if (orderStatus === 'NEW' || orderStatus === 'PARTIALLY_FILLED') {
-                logger.log(baseSymbol, quoteSymbol, orderId, '仍未完成買入，繼續追蹤訂單狀態');
-            } else {
-                delete fillingOrders[orderId];
-                logger.log(baseSymbol, quoteSymbol, orderId, '(停止追蹤)未知訂單', orderStatus);
-            }
-
-            // 持續追蹤未完成訂單
-            this.delayTicketTracking(fillingOrders, 60);
-        });
-    }
-
-    delayTicketTracking(fillingOrders, delaySec) {
-        this.ticketInterval && clearTimeout(this.ticketInterval);
-        if (fillingOrders && fillingOrders.length > 0) {
-            console.log('處理中訂單:', fillingOrders);
-            this.ticketInterval = setTimeout(() => {
-                this.ticketTracking(fillingOrders);
-            }, delaySec * 1000);
-        }
     }
 
     /**
