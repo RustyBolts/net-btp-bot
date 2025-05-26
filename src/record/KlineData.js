@@ -91,11 +91,12 @@ class KlineData {
         const delayMins = this.getKlineDelayMins(symbol);
         const interval = this.interval[symbol];
         const runningMins = this.updateTime[symbol] ? (Date.now() - this.updateTime[symbol]) / 60000 : 0;
-        console.log('需測試 - runningMins:', runningMins);
         if (runningMins % DelayMins[interval] < delayMins) {
             const cIndex = KLINE.Closing;
             const klineList = await spot.getKlines(symbol, interval, limit);
-            write(`KLINE/${symbol}`, interval, JSON.stringify(klineList.map((kline) => kline.slice(0, 5))));//抓資料0~5，對應KLINE 的順序
+            // write(`KLINE/${symbol}`, interval, JSON.stringify(klineList.map((kline) => kline.slice(0, 5))));//抓資料0~5，對應KLINE 的順序
+            write(`KLINE/${symbol}`, '4hr', JSON.stringify(klineList.map((kline) => kline.slice(0, 5))));//抓資料0~5，對應KLINE 的順序
+            // todo 寫4hr 是為了配合UI讀入的資料庫欄位名稱，需要改成能隨UI 修改間隔
 
             this.prices[symbol] = klineList.map((kline) => parseFloat(kline[cIndex]));
             this.updateTime[symbol] = Date.now();
