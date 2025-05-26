@@ -27,20 +27,14 @@ class GridTrading extends StrategyProxy {
      */
     pause(baseSymbol = '', quoteSymbol = '') {
         if (baseSymbol === '' || quoteSymbol === '') {
-            // 重置追蹤執行時間
-            trade.resetRunningTime();
-
             // 清除追蹤設定
             trade.clearTrackingIntervalTimeout();
-            trade.kline4hrPrices = {};
 
             trade.calm(true);
             return;
         }
 
         const symbol = `${baseSymbol}${quoteSymbol}`;
-        trade.resetRunningTime(symbol);
-        trade.kline4hrPrices[symbol] = {};
         trade.clearTrackingIntervalTimeout(symbol);
 
         trade.calm(true, baseSymbol, quoteSymbol);
@@ -57,14 +51,11 @@ class GridTrading extends StrategyProxy {
             this.tracking();
         } else {
             const symbol = `${baseSymbol}${quoteSymbol}`;
-            trade.resetRunningTime(symbol);
-            trade.kline4hrPrices[symbol] = {};
-
             const avgPrice = await trade.resultBidTicket(baseSymbol, quoteSymbol, false);
             trade.entryPrice[symbol] = avgPrice;
 
             trade.calm(false, baseSymbol, quoteSymbol);
-            trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.5, 0);
+            trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.5);
         }
     }
 
@@ -193,11 +184,10 @@ class GridTrading extends StrategyProxy {
     async execute(baseSymbol, quoteSymbol, funds) {
         const symbol = `${baseSymbol}${quoteSymbol}`;
         trade.entryPrice[symbol] = 0;
-        trade.resetRunningTime(symbol);
 
         const delaySec = 0.5;
         this.fill(baseSymbol, quoteSymbol, funds);
-        trade.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, 0);
+        trade.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec);
 
         await new Promise(resolve => setTimeout(resolve, delaySec));
     }
@@ -238,11 +228,9 @@ class GridTrading extends StrategyProxy {
         const fillingOrders = [];// 未完成訂單
         Object.keys(stocks).forEach((quoteSymbol) => {
             Object.keys(stocks[quoteSymbol]).forEach((baseSymbol, i) => {
-                const symbol = `${baseSymbol}${quoteSymbol}`;
-                // if (stocks[quoteSymbol][baseSymbol].calm === true) {
-                //     return;
-                // }
+                trade.kline(baseSymbol, quoteSymbol, '4hr');
 
+                const symbol = `${baseSymbol}${quoteSymbol}`;
                 const tickets = orders[quoteSymbol][baseSymbol];
                 const onlySell = stocks[quoteSymbol][baseSymbol].profit ?? false;
                 trade.onlySell[symbol] = onlySell;
@@ -252,10 +240,9 @@ class GridTrading extends StrategyProxy {
                     const stockFunds = stocks[quoteSymbol][baseSymbol].funds;
                     logger.log(baseSymbol, quoteSymbol, baseSymbol, quoteSymbol, '資金:', stockFunds);
                     if (stockFunds > 0) {
-                        trade.resetRunningTime(symbol);
                         trade.entryPrice[symbol] = 0;
 
-                        trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1 + i, 0);
+                        trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1 + i);
                     }
                     return;
                 }
@@ -267,14 +254,12 @@ class GridTrading extends StrategyProxy {
                         fillingOrders.push({ [orderId]: [baseSymbol, quoteSymbol] });
                     } else if (orderStatus === 'FILLED') {
                         const avgPrice = await trade.resultBidTicket(baseSymbol, quoteSymbol, false);
-
-                        trade.resetRunningTime(symbol);
                         trade.entryPrice[symbol] = avgPrice;
 
                         const stockFunds = stocks[quoteSymbol][baseSymbol].funds;
                         logger.log(baseSymbol, quoteSymbol, baseSymbol, quoteSymbol, '資金:', stockFunds);
 
-                        trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.5 + i, 0);
+                        trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.5 + i);
                     } else {
                         logger.log(baseSymbol, quoteSymbol, orderId, '未知訂單', orderStatus);
                     }

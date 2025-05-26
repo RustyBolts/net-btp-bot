@@ -5,57 +5,12 @@ const SpotLogger = require("../record/SpotLogger");
 const GridTradingRecord = require("../record/GridTradingRecord");
 const TradingStrategy = require("../strategy/TradingStrategy");
 const SpotTrade = require("./SpotTrade");
+const { KlineData, TimeInterval, DelayMins } = require("../record/KlineData");
 const logger = new SpotLogger();
 const record = new GridTradingRecord();
 const strategy = new TradingStrategy();
 const spot = new SpotTrade();
-
-// 時間間距  
-const Interval = {
-    MINUTES_01: '1m',
-    MINUTES_03: '3m',
-    MINUTES_05: '5m',
-    MINUTES_15: '15m',
-    MINUTES_30: '30m',
-    HOURS_01: '1h',
-    HOURS_02: '2h',
-    HOURS_04: '4h',
-    HOURS_06: '6h',
-    HOURS_08: '8h',
-    HOURS_12: '12h',
-    DAYS_1: '1d',
-    DAYS_3: '3d',
-    WEEK_1: '1w',
-    MONTH_1: '1M',
-};
-
-// K線資料參考索引
-const KLINE = {
-    Opening: 1,     // 開盤價 
-    Highest: 2,     // 最高價 
-    Lowest: 3,      // 最低價 
-    Closing: 4,     // 收盤價 
-    Valume: 5,      // 成交額 
-    // todo 其他參數可以再補入，這邊單純是Array 的順序 
-};
-
-// 延遲時間
-const DelayMins = {
-    [Interval.MINUTES_01]: 1,
-    [Interval.MINUTES_03]: 3,
-    [Interval.MINUTES_05]: 5,
-    [Interval.MINUTES_15]: 15,
-    [Interval.MINUTES_30]: 30,
-    [Interval.HOURS_01]: 60,
-    [Interval.HOURS_02]: 2 * 60,
-    [Interval.HOURS_04]: 4 * 60,
-    [Interval.HOURS_06]: 6 * 60,
-    [Interval.HOURS_08]: 8 * 60,
-    [Interval.HOURS_12]: 12 * 60,
-    [Interval.DAYS_1]: 24 * 60,
-    [Interval.DAYS_3]: 3 * 24 * 60,
-    [Interval.WEEK_1]: 7 * 24 * 60,
-};
+const kline = new KlineData();
 
 class GridStrategyTrade {
     constructor() {
@@ -63,13 +18,7 @@ class GridStrategyTrade {
         this.entryPrice = {};
 
         this.rsi = {};
-
-        this.kline4hrPrices = {};
-        this.klineInverval = Interval.HOURS_04;
-        this.klineDelayMins = DelayMins[Interval.MINUTES_15];
-        this.klineRefreshCountMax = DelayMins[this.klineInverval];
-        this.runningTime = {};
-
+        this.startTime = {};// 交易對啟動時間
         this.maxLossPercentage = 0.06;// 最大損失比例
 
         this.onlySell = {};// 只做賣的交易對
@@ -116,6 +65,11 @@ class GridStrategyTrade {
         this.logcat(baseSymbol, quoteSymbol);
     }
 
+    kline(baseSymbol, quoteSymbol, timeInterval = '4hr') {
+        kline.setKlineInterval(`${baseSymbol}${quoteSymbol}`, timeInterval);
+        // this.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1);//todo 如果外部操作，需要重新開始追蹤
+    }
+
     /**
      * 下訂單後未完成，執行追蹤訂單後完成，進入交易追蹤流程
      * @param {string} baseSymbol 
@@ -128,35 +82,30 @@ class GridStrategyTrade {
         this.recordOrder(baseSymbol, quoteSymbol, orderTicket, precision);
 
         // 開始追蹤交易倉位
-        this.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1, 0);
+        this.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1);
     }
 
     /**
      * 追蹤交易策略，並根據策略決定是否進行交易
      * @param {string} baseSymbol 
      * @param {string} quoteSymbol 
-     * @param {number} gazeDelayMins 延遲下一次策略檢查時間，單位分鐘
      */
-    async strategyTracking(baseSymbol, quoteSymbol, gazeDelayMins) {
+    async strategyTracking(baseSymbol, quoteSymbol) {
         const log = (...message) => logger.log(baseSymbol, quoteSymbol, ...message);
 
         const symbol = `${baseSymbol}${quoteSymbol}`;
-        const prices = await this.getKlines(symbol);
+        const prices = await kline.updatePrices(symbol, 100);
         const currentPrice = prices[prices.length - 1];
 
         const rsiHigh = this.rsi[symbol]?.high || 60;
         const rsiLow = this.rsi[symbol]?.low || 40;
-
-        this.runningTime[symbol] += gazeDelayMins;
-        const runningTime = this.runningTime[symbol] * 60 * 1000;
-        // console.log(symbol, 'gazeDelayMins:', gazeDelayMins, '/', this.runningTime[symbol]);
+        const runningTime = Date.now() - this.startTime[symbol];
 
         // 輸入秒數，轉成時分秒
         const timeStr = new Date(runningTime).toISOString().substring(11, 19);
         log(symbol, this.onlySell[symbol] ? '====ONLY_SELL====' : `================= 已運行`, timeStr);
 
-        gazeDelayMins = this.klineDelayMins;
-
+        var delayMins = kline.getKlineDelayMins(symbol);
         var trackType = 'strategy';
         const options = { rsiLow, rsiHigh, maxLossPercentage: this.maxLossPercentage };
         const {
@@ -169,11 +118,11 @@ class GridStrategyTrade {
         if (record.stock[quoteSymbol][baseSymbol].calm) {
             log('[ CALM ', action, ']', symbol, 'XXXX');
             trackType = 'calm';
-            gazeDelayMins = 60;// 延遲60分鐘更新kline
+            delayMins *= 5;
         }
         else if (action === 'GAZE') {
             log('[', action, ']', symbol);
-            gazeDelayMins = DelayMins[Interval.MINUTES_01];
+            delayMins /= 5;
         }
         else if (
             action === 'STOP_LOSS'
@@ -181,10 +130,7 @@ class GridStrategyTrade {
         ) {
             log('[', action, ']', symbol, '止損出清流程');
             trackType = await this.sell(baseSymbol, quoteSymbol);
-            this.resetRunningTime(symbol);
-            this.kline4hrPrices[symbol] = {};
-            gazeDelayMins = 60 * 12;
-            this.notify(`${symbol}執行止損, 延遲${gazeDelayMins}分鐘後重啟`);
+            this.notify(`${symbol}執行止損,止損價格:${currentPrice.toFixed(2)} ${quoteSymbol}`);
         }
         else if (action === 'SELL') {
             log('[', action, ']', symbol);
@@ -209,7 +155,7 @@ class GridStrategyTrade {
 
             // 機器人通知
             this.notify(`${action} ${symbol} ，手動做單提醒!`);
-            gazeDelayMins = DelayMins[Interval.MINUTES_05];
+            delayMins /= 2;
         }
         else {
             log('[', action, ']', symbol, '>>>');
@@ -230,21 +176,27 @@ class GridStrategyTrade {
 
         console.log('\n');
 
-        const delaySec = 60 * gazeDelayMins;
+        const delaySec = 60 * delayMins;
         if (trackType === 'ticket') {
             setTimeout(() => this.tracking(), delaySec * 1000);
         } else if (trackType === 'strategy') {
-            this.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, gazeDelayMins);
+            this.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec);
         } else if (trackType === 'calm') {
-            this.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, gazeDelayMins);
+            this.delayStrategyTracking(baseSymbol, quoteSymbol, delaySec);
         }
     }
 
-    delayStrategyTracking(baseSymbol, quoteSymbol, delaySec, gazeDelayMins) {
+    /**
+     * 延遲追蹤交易策略
+     * @param {string} baseSymbol 
+     * @param {string} quoteSymbol 
+     * @param {number} delaySec 延遲秒數
+     */
+    delayStrategyTracking(baseSymbol, quoteSymbol, delaySec) {
         const symbol = `${baseSymbol}${quoteSymbol}`;
         this.clearTrackingIntervalTimeout(symbol);
         this.trackingInterval[symbol] = setTimeout(() => {
-            this.strategyTracking(baseSymbol, quoteSymbol, gazeDelayMins);
+            this.strategyTracking(baseSymbol, quoteSymbol);
         }, delaySec * 1000);
     }
 
@@ -258,22 +210,6 @@ class GridStrategyTrade {
         Object.keys(this.trackingInterval).forEach((symbol) => {
             this.clearTrackingIntervalTimeout(symbol);
         });
-    }
-
-    async getKlines(symbol) {
-        const limit = 100;
-        if (this.runningTime[symbol] % this.klineRefreshCountMax < this.klineDelayMins) {
-            const cIndex = KLINE.Closing;
-            const klines = await spot.getKlines(symbol, this.klineInverval, limit);
-            this.kline4hrPrices[symbol] = klines.map((kline) => parseFloat(kline[cIndex]));
-            // console.log(symbol, 'klines:', klines.map((kline) => kline.slice(0, 5))[klines.length - 1]);
-            write(`KLINE/${symbol}`, '4hr', JSON.stringify(klines.map((kline) => kline.slice(0, 5))));
-        } else {
-            const tickerPrice = await spot.getTickerPrice(symbol);
-            this.kline4hrPrices[symbol][limit - 1] = tickerPrice;
-        }
-
-        return this.kline4hrPrices[symbol];
     }
 
     // 檢查是否提前認賠止損
@@ -398,7 +334,7 @@ class GridStrategyTrade {
 
                 const symbol = `${baseSymbol}${quoteSymbol}`;
                 if (this.onlySell[symbol]) {
-                    // this.profit(baseSymbol, quoteSymbol, false);
+                    this.onlySell[symbol] = false;
                     this.clearTicketStock(baseSymbol, quoteSymbol);
                     log(symbol, '止盈結算，停止追蹤策略');
                     return 'stop trade';
@@ -736,21 +672,11 @@ class GridStrategyTrade {
      */
     async clearTicketStock(baseSymbol, quoteSymbol) {
         const symbol = `${baseSymbol}${quoteSymbol}`;
-        this.resetRunningTime(symbol);
-        this.kline4hrPrices[symbol] = {};
+        kline.clearPrices(symbol);
         this.clearTrackingIntervalTimeout(symbol);
-        this.onlySell[symbol] = false;
+        delete this.startTime[symbol];
 
         record.delStock({ baseSymbol: baseSymbol, quoteSymbol: quoteSymbol });
-    }
-
-    resetRunningTime(symbol) {
-        if (symbol) {
-            this.runningTime[symbol] = 0;
-            return;
-        }
-        Object.keys(this.runningTime)
-            .forEach((symbol) => this.resetRunningTime(symbol));
     }
 
     notify(message) {
