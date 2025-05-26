@@ -228,7 +228,7 @@ class GridTrading extends StrategyProxy {
         const fillingOrders = [];// 未完成訂單
         Object.keys(stocks).forEach((quoteSymbol) => {
             Object.keys(stocks[quoteSymbol]).forEach((baseSymbol, i) => {
-                trade.kline(baseSymbol, quoteSymbol, '4hr');
+                trade.kline(baseSymbol, quoteSymbol, '4h');
 
                 const symbol = `${baseSymbol}${quoteSymbol}`;
                 const tickets = orders[quoteSymbol][baseSymbol];
@@ -242,6 +242,7 @@ class GridTrading extends StrategyProxy {
                     if (stockFunds > 0) {
                         trade.entryPrice[symbol] = 0;
 
+                        trade.startTime[symbol] = Date.now();
                         trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1 + i);
                     }
                     return;
@@ -259,6 +260,7 @@ class GridTrading extends StrategyProxy {
                         const stockFunds = stocks[quoteSymbol][baseSymbol].funds;
                         logger.log(baseSymbol, quoteSymbol, baseSymbol, quoteSymbol, '資金:', stockFunds);
 
+                        trade.startTime[symbol] = Date.now();
                         trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.5 + i);
                     } else {
                         logger.log(baseSymbol, quoteSymbol, orderId, '未知訂單', orderStatus);
