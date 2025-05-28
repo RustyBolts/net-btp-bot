@@ -99,8 +99,11 @@ class GridTradingRecord {
         }
     }
 
-    getFunds(data) {
-        const { baseSymbol, quoteSymbol } = data;
+    getFunds(baseSymbol = '', quoteSymbol = '') {
+        if (baseSymbol === '' || quoteSymbol === '') {
+            return 0;
+        }
+
         if (this.stock[quoteSymbol] &&
             this.stock[quoteSymbol][baseSymbol]) {
             return this.stock[quoteSymbol][baseSymbol].funds;
@@ -108,8 +111,29 @@ class GridTradingRecord {
         return 0;
     }
 
-    getOrders(data) {
-        const { baseSymbol, quoteSymbol, orderId } = data;
+    getStocks(baseSymbol = '', quoteSymbol = '') {
+        if (baseSymbol === '' || quoteSymbol === '') {
+            return this.stock;
+        }
+
+        if (this.stock[quoteSymbol] &&
+            this.stock[quoteSymbol][baseSymbol]) {
+            return this.stock[quoteSymbol][baseSymbol];
+        }
+        return {};
+    }
+
+    /**
+     * 
+     * @param {string} baseSymbol 
+     * @param {string} quoteSymbol 
+     * @returns 
+     */
+    getOrders(baseSymbol = '', quoteSymbol = '') {
+        if (baseSymbol === '' || quoteSymbol === '') {
+            return this.order;
+        }
+
         if (this.order[quoteSymbol] &&
             this.order[quoteSymbol][baseSymbol]) {
             return this.order[quoteSymbol][baseSymbol];

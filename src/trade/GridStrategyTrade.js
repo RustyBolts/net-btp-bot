@@ -1,13 +1,13 @@
 const { getSymbolPrecision, adjustPrice, adjustQuantity } = require("./ExchangeInfo");
 const { googleLogcat } = require("../record/GoogleSpreadsheetRecord");
 const { write } = require("../../src-firebase/core/FirebaseBridge");
+const RecordManager = require("../record/RecordManager");
 const SpotLogger = require("../record/SpotLogger");
-const GridTradingRecord = require("../record/GridTradingRecord");
 const TradingStrategy = require("../strategy/TradingStrategy");
 const SpotTrade = require("./SpotTrade");
-const { KlineData, TimeInterval, DelayMins } = require("../record/KlineData");
+const KlineData = require("../record/KlineData");
+const rm = RecordManager.getInstance();
 const logger = new SpotLogger();
-const record = new GridTradingRecord();
 const strategy = new TradingStrategy();
 const spot = new SpotTrade();
 const kline = new KlineData();
@@ -15,57 +15,13 @@ const kline = new KlineData();
 class GridStrategyTrade {
     constructor() {
         this.trackingInterval = {};
-        this.entryPrice = {};
 
         this.rsi = {};
         this.startTime = {};// 交易對啟動時間
         this.maxLossPercentage = 0.06;// 最大損失比例
-
-        this.onlySell = {};// 只做賣的交易對
     }
 
-    calm(pause, baseSymbol = '', quoteSymbol = '') {
-        record.setCalm(pause, baseSymbol, quoteSymbol);
-    }
-
-    stock() {
-        return record.stock;
-    }
-
-    order(baseSymbol = '', quoteSymbol = '') {
-        if (baseSymbol === '' || quoteSymbol === '')
-            return record.order;
-        return record.getOrders({ baseSymbol, quoteSymbol });
-    }
-
-    funds(baseSymbol, quoteSymbol) {
-        return record.getFunds({ baseSymbol, quoteSymbol });
-    }
-
-    profit(onlySell, baseSymbol, quoteSymbol) {
-        record.setProfit(onlySell, baseSymbol, quoteSymbol);
-
-        const symbol = `${baseSymbol}${quoteSymbol}`;
-        this.onlySell[symbol] = onlySell;
-
-        onlySell && logger.log(baseSymbol, quoteSymbol, symbol, '已設定只止盈交易');
-    }
-
-    read() {
-        return record.read();
-    }
-
-    write(baseSymbol, quoteSymbol, funds) {
-        record.writeStock({
-            baseSymbol, quoteSymbol,
-            funds: funds,
-            profit: this.onlySell[`${baseSymbol}${quoteSymbol}`] || false,
-            calm: false,
-        });
-        this.logcat(baseSymbol, quoteSymbol);
-    }
-
-    kline(baseSymbol, quoteSymbol, timeInterval = '4hr') {
+    setKlineData(baseSymbol, quoteSymbol, timeInterval = '4hr') {
         kline.setKlineInterval(`${baseSymbol}${quoteSymbol}`, timeInterval);
         // this.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1);//todo 如果外部操作，需要重新開始追蹤
     }
@@ -103,10 +59,11 @@ class GridStrategyTrade {
 
         // 輸入秒數，轉成時分秒
         const timeStr = new Date(runningTime).toISOString().substring(11, 19);
-        log(symbol, this.onlySell[symbol] ? '====ONLY_SELL====' : `================= 已運行`, timeStr);
+        log(symbol, rm.getProfitStatus(baseSymbol, quoteSymbol) ? '====ONLY_SELL====' : `================= 已運行`, timeStr);
 
         var delayMins = kline.getKlineDelayMins(symbol);
         var trackType = 'strategy';
+        var entryPrice = rm.getEntryPrice(baseSymbol, quoteSymbol);
         const options = { rsiLow, rsiHigh, maxLossPercentage: this.maxLossPercentage };
         const {
             action,
@@ -114,8 +71,9 @@ class GridStrategyTrade {
             rsi,
             bollingerBands,
             fibonacciLevels
-        } = strategy.determineTradeAction(log, prices, currentPrice, this.entryPrice[symbol], options);
-        if (record.stock[quoteSymbol][baseSymbol].calm) {
+        } = strategy.determineTradeAction(log, prices, currentPrice, entryPrice, options);
+        const isPause = rm.getStock(baseSymbol, quoteSymbol).calm;
+        if (isPause) {
             log('[ CALM ', action, ']', symbol, 'XXXX');
             trackType = 'calm';
             delayMins *= 5;
@@ -145,7 +103,7 @@ class GridStrategyTrade {
             const divide = 5;
             const precision = await getSymbolPrecision(symbol);
             const slippage = precision.tickSize * 5;// 滑點範圍: 以市價下單會買到為止，價格可能會因此滑坡買到currentPrice 更高的價格，用購入數量來修正 (倉位價格會變高，最後一倉可能不足購入)
-            const quantity = record.getFunds({ baseSymbol, quoteSymbol }) / (currentPrice + slippage) / divide;// 修正數量，市價買入時可能會滑坡，造成購入價格平均比預算高一點點，這邊先調整一下讓5等分能正常分倉買入
+            const quantity = rm.getFunds(baseSymbol, quoteSymbol) / (currentPrice + slippage) / divide;// 修正數量，市價買入時可能會滑坡，造成購入價格平均比預算高一點點，這邊先調整一下讓5等分能正常分倉買入
             // log('修正數量:', quantity - precision.stepSize);
             log('[', action, ']', quantity, baseSymbol);
             trackType = await this.buy(baseSymbol, quoteSymbol, quantity, currentPrice, step[action]);
@@ -161,7 +119,7 @@ class GridStrategyTrade {
             log('[', action, ']', symbol, '>>>');
         }
 
-        const entryPrice = this.entryPrice[symbol];
+        entryPrice = rm.getEntryPrice(baseSymbol, quoteSymbol);
         if (entryPrice) {
             const qty = this.getAvailableGoods(baseSymbol, quoteSymbol);
             const diff = currentPrice - entryPrice;
@@ -215,12 +173,11 @@ class GridStrategyTrade {
     // 檢查是否提前認賠止損
     checkEerlyStopLoss(baseSymbol, quoteSymbol, currentPrice) {
         var stopLoss = false;
-        const orders = record.order[quoteSymbol][baseSymbol];
-        if (orders) {
+        const order = rm.getOrder(baseSymbol, quoteSymbol);
+        if (order) {
             const now = Date.now();
-            const symbol = `${baseSymbol}${quoteSymbol}`;
-            const stockTimeouts = Object.keys(orders).map((orderId) => {
-                const orderTicket = orders[orderId];
+            const stockTimeouts = Object.keys(order).map((orderId) => {
+                const orderTicket = order[orderId];
                 const orderStatus = orderTicket.status;
                 if (orderStatus === 'FILLED') {
                     return now - orderTicket.transactTime;
@@ -231,7 +188,7 @@ class GridStrategyTrade {
             const log = (...message) => logger.log(baseSymbol, quoteSymbol, ...message);
             log(stockTimeouts);
             const last = stockTimeouts.sort((a, b) => b - a)[0];
-            const entryPrice = this.entryPrice[symbol];
+            const entryPrice = rm.getEntryPrice(baseSymbol, quoteSymbol);
             if (last && entryPrice) {
                 const diff = currentPrice - entryPrice;
                 const percentage = diff / entryPrice;
@@ -260,15 +217,13 @@ class GridStrategyTrade {
      */
     async buy(baseSymbol, quoteSymbol, quantity, tickerPrice, step = 1) {
         const log = (...message) => logger.log(baseSymbol, quoteSymbol, ...message);
-        const symbol = `${baseSymbol}${quoteSymbol}`;
-        console.log('this.onlySell[', symbol, ']:', this.onlySell[symbol]);
-        if (this.onlySell[symbol]) {
+        if (rm.getProfitStatus(baseSymbol, quoteSymbol)) {
             log('止盈限價，不進行買入');
             return 'strategy';
         }
 
         // 多筆分倉的情況下，盡可能讓每一筆越買越低價，避免符合購入的條件一直買入
-        const entryPrice = this.entryPrice[symbol];
+        const entryPrice = rm.getEntryPrice(baseSymbol, quoteSymbol);
         if (entryPrice > 0 && entryPrice * step < tickerPrice) {
             // 沒有越買越低，跳掉
             log('買入目標價格:', entryPrice * step, quoteSymbol);
@@ -333,8 +288,8 @@ class GridStrategyTrade {
                 log('交易成功');
 
                 const symbol = `${baseSymbol}${quoteSymbol}`;
-                if (this.onlySell[symbol]) {
-                    this.onlySell[symbol] = false;
+                if (rm.getProfitStatus(baseSymbol, quoteSymbol)) {
+                    rm.setProfitRecord(false, baseSymbol, quoteSymbol);
                     this.clearTicketStock(baseSymbol, quoteSymbol);
                     log(symbol, '止盈結算，停止追蹤策略');
                     return 'stop trade';
@@ -412,7 +367,7 @@ class GridStrategyTrade {
             // const availableFunds = this.getAvailableFunds(baseSymbol, quoteSymbol);
             // log('剩餘資金:', availableFunds);
             // const avgPrice = await this.resultBidTicket(baseSymbol, quoteSymbol, false);
-            // this.entryPrice[symbol] = avgPrice;
+            // rm.setEntryPrice(avgPrice, baseSymbol, quoteSymbol);
             // log('買入平均價格:', avgPrice);
             // await this.recordOrder(baseSymbol, quoteSymbol, orderTicket, precision);
             return 'filling';
@@ -424,23 +379,22 @@ class GridStrategyTrade {
                 log('剩餘資金:', availableFunds);
 
                 const avgPrice = await this.resultBidTicket(baseSymbol, quoteSymbol, false);
-                this.entryPrice[symbol] = avgPrice;
+                // this.entryPrice[symbol] = avgPrice;
+                rm.setEntryPrice(avgPrice, baseSymbol, quoteSymbol);
                 log('買入平均價格:', avgPrice);
 
             } else {
                 // 出售時先刪除所有買入訂單，結算可用資金與商品數量 todo 這邊都是預設full 的情況
-                record.writeStock({
+                rm.setStockRecord({
                     baseSymbol, quoteSymbol,
                     funds: availableFunds,
-                    profit: this.onlySell[symbol] || false,
+                    profit: rm.getProfitStatus(baseSymbol, quoteSymbol),
                     calm: false,
                 });
-                // record.writeStock({ baseSymbol, quoteSymbol, funds: availableFunds, profit: this.onlySell[symbol] || false });
-                // record.writeStock({ baseSymbol, quoteSymbol, funds: availableFunds });
 
                 // 結算以獲得平均價格，並刪除所有買入訂單
                 const avgPrice = await this.resultBidTicket(baseSymbol, quoteSymbol, true);
-                this.entryPrice[symbol] = 0;
+                rm.setEntryPrice(0, baseSymbol, quoteSymbol);
                 log('結算前買入平均價格:', avgPrice);
 
                 const sellOutQty = await this.resultAskTicket(baseSymbol, quoteSymbol);
@@ -478,7 +432,7 @@ class GridStrategyTrade {
             status, side, transactTime,
             price, quantity, spent
         };
-        record.writeOrder(orderRecord);
+        rm.setOrderRecord(orderRecord);
         return orderRecord;
 
         // spot order ticket
@@ -540,7 +494,7 @@ class GridStrategyTrade {
 
     async logcat(baseSymbol, quoteSymbol, orderRecord = {}) {
         const symbol = `${baseSymbol}${quoteSymbol}`;
-        const funds = record.getFunds({ baseSymbol, quoteSymbol });
+        const funds = rm.getFunds(baseSymbol, quoteSymbol);
         const availableFunds = this.getAvailableFunds(baseSymbol, quoteSymbol);//重複
 
         if (!!orderRecord.orderId) {
@@ -555,15 +509,15 @@ class GridStrategyTrade {
             this.notify(`${symbol}\n${tradeSide}\n運作資金 (${tradeSpent}) ${availableFunds.toFixed(2)} / ${funds.toFixed(2)} ${quoteSymbol}`);
         }
 
-        const avgPrice = this.entryPrice[symbol] || 0;
+        const avgPrice = rm.getEntryPrice(baseSymbol, quoteSymbol);
         return googleLogcat(symbol, funds, avgPrice, orderRecord);
     }
 
     getAvailableFunds(baseSymbol, quoteSymbol) {
         let totalSpent = 0;
-        const orders = record.getOrders({ baseSymbol, quoteSymbol });
-        Object.keys(orders).forEach(orderId => {
-            const { status, side, transactTime, quantity, price, spent } = orders[orderId];
+        const order = rm.getOrder(baseSymbol, quoteSymbol);
+        Object.keys(order).forEach(orderId => {
+            const { status, side, transactTime, quantity, price, spent } = order[orderId];
             if (status === 'FILLED') {
                 console.log(orderId, status, '進行已完成訂單結算');
                 totalSpent += spent;//spent: BUY為負值;SELL為正值
@@ -572,14 +526,14 @@ class GridStrategyTrade {
             }
             // todo 處理不是 filled 的情況，賣出失敗時撤掉並不一定要刪掉訂單，可以計算資金還原
         });
-        return record.getFunds({ baseSymbol, quoteSymbol }) + totalSpent;
+        return rm.getFunds(baseSymbol, quoteSymbol) + totalSpent;
     }
 
     getAvailableGoods(baseSymbol, quoteSymbol) {
         let goods = 0;
-        const orders = record.getOrders({ baseSymbol, quoteSymbol });
-        Object.keys(orders).forEach(orderId => {
-            const { status, side, transactTime, quantity, price, spent } = orders[orderId];
+        const order = rm.getOrder(baseSymbol, quoteSymbol);
+        Object.keys(order).forEach(orderId => {
+            const { status, side, transactTime, quantity, price, spent } = order[orderId];
             if (status === 'FILLED') {
                 // console.log(orderId, status, '進行已完成訂單結算');//測試提醒用，但現在每輪都刷一次，減少資訊影響
                 if (side === 'BUY') {
@@ -593,7 +547,7 @@ class GridStrategyTrade {
             // todo 處理不是 filled 的情況，賣出失敗時撤掉並不一定要刪掉訂單，可以計算資金還原
         });
         if (goods < 0) {
-            logger.log(baseSymbol, quoteSymbol, 'orders:', orders);
+            logger.log(baseSymbol, quoteSymbol, 'orders:', order);
             logger.log(baseSymbol, quoteSymbol, '負數商品數量，可能有問題', goods);
             goods = 0;
         }
@@ -601,11 +555,11 @@ class GridStrategyTrade {
     }
 
     async resultBidTicket(baseSymbol, quoteSymbol, delBuyOrders) {
-        const orders = record.getOrders({ baseSymbol, quoteSymbol });
+        const order = rm.getOrder(baseSymbol, quoteSymbol);
         const resultOrderIds = [];
         var avgPrice = 0, stackValue = 0, stackQty = 0;
-        Object.keys(orders).forEach(orderId => {
-            const { status, side, transactTime, quantity, price, spent } = orders[orderId];
+        Object.keys(order).forEach(orderId => {
+            const { status, side, transactTime, quantity, price, spent } = order[orderId];
             if (side === 'BUY' && status === 'FILLED') {
                 stackValue += spent;
                 stackQty += quantity;
@@ -616,29 +570,26 @@ class GridStrategyTrade {
         const symbol = `${baseSymbol}${quoteSymbol}`;
         const precision = await getSymbolPrecision(symbol);
         avgPrice = adjustPrice(-stackValue / stackQty, precision);//spent 在買入時紀錄為負值 todo avgPrice 在精度方面，官方提供的數字有問題，這邊通用小數點8以下
-        // avgPrice = adjustQuantity(-stackValue / stackQty, precision);//spent 在買入時紀錄為負值
 
         if (!delBuyOrders) {
-            // this.entryPrice[symbol] = avgPrice;
             return avgPrice;
         }
 
         // 清除所有買入訂單
         resultOrderIds.forEach(orderId => {
-            record.delOrder({ baseSymbol, quoteSymbol, orderId });
+            rm.removeOrderRecord({ baseSymbol, quoteSymbol, orderId });
         });
-        // this.entryPrice[symbol] = 0;
 
         return avgPrice;
     }
 
     async resultAskTicket(baseSymbol, quoteSymbol) {
-        const orders = record.getOrders({ baseSymbol, quoteSymbol });
+        const order = rm.getOrder(baseSymbol, quoteSymbol);
         const resultOrderIds = [];
         var sellOutQty = 0;
         var sellPrice = 0;
-        Object.keys(orders).forEach(orderId => {
-            const { status, side, transactTime, quantity, price, spent } = orders[orderId];
+        Object.keys(order).forEach(orderId => {
+            const { status, side, transactTime, quantity, price, spent } = order[orderId];
             if (side === 'SELL' && status === 'FILLED') {
                 resultOrderIds.push(orderId);
                 sellOutQty += quantity;
@@ -652,11 +603,12 @@ class GridStrategyTrade {
 
         // 清除所有賣出訂單
         resultOrderIds.forEach(orderId => {
-            record.delOrder({ baseSymbol, quoteSymbol, orderId });
+            rm.removeOrderRecord({ baseSymbol, quoteSymbol, orderId });
         });
 
-        if (this.entryPrice[symbol]) {
-            const avgPrice = this.entryPrice[symbol];
+        const entryPrice = rm.getEntryPrice(baseSymbol, quoteSymbol);
+        if (entryPrice) {
+            const avgPrice = entryPrice;
             const diff = sellPrice - avgPrice;
             const value = diff * sellOutQty;
             logger.log(baseSymbol, quoteSymbol, '已實現盈虧:', value.toFixed(6), '(', (diff / avgPrice * 100).toFixed(2), '%)');
@@ -676,7 +628,7 @@ class GridStrategyTrade {
         this.clearTrackingIntervalTimeout(symbol);
         delete this.startTime[symbol];
 
-        record.delStock({ baseSymbol: baseSymbol, quoteSymbol: quoteSymbol });
+        rm.removeStockRecord({ baseSymbol, quoteSymbol });
     }
 
     notify(message) {

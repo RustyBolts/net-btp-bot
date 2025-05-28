@@ -1,9 +1,11 @@
 const { getSymbolPrecision, getExchangeInfo } = require("./trade/ExchangeInfo");
+const RecordManager = require("./record/RecordManager");
 const StrategyProxy = require("./StrategyProxy");
 const SpotLogger = require("./record/SpotLogger");
 const SpotTrade = require("./trade/SpotTrade");
 const GridStrategyTrade = require("./trade/GridStrategyTrade");
 const MarketTicket = require("./trade/MarketTicket");
+const rm = RecordManager.getInstance();
 const logger = new SpotLogger();
 const spot = new SpotTrade();
 const trade = new GridStrategyTrade();
@@ -30,14 +32,14 @@ class GridTrading extends StrategyProxy {
             // 清除追蹤設定
             trade.clearTrackingIntervalTimeout();
 
-            trade.calm(true);
+            rm.setCalmRecord(true);
             return;
         }
 
         const symbol = `${baseSymbol}${quoteSymbol}`;
         trade.clearTrackingIntervalTimeout(symbol);
 
-        trade.calm(true, baseSymbol, quoteSymbol);
+        rm.setCalmRecord(true, baseSymbol, quoteSymbol);
     }
 
     /**
@@ -47,14 +49,12 @@ class GridTrading extends StrategyProxy {
      */
     async resume(baseSymbol = '', quoteSymbol = '') {
         if (baseSymbol === '' || quoteSymbol === '') {
-            trade.calm(false);
+            rm.setCalmRecord(false);
             this.tracking();
         } else {
-            const symbol = `${baseSymbol}${quoteSymbol}`;
             const avgPrice = await trade.resultBidTicket(baseSymbol, quoteSymbol, false);
-            trade.entryPrice[symbol] = avgPrice;
-
-            trade.calm(false, baseSymbol, quoteSymbol);
+            rm.setEntryPrice(avgPrice, baseSymbol, quoteSymbol);
+            rm.setCalmRecord(false, baseSymbol, quoteSymbol);
             trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.5);
         }
     }
@@ -68,20 +68,21 @@ class GridTrading extends StrategyProxy {
      */
     profit(baseSymbol = '', quoteSymbol = '', onlySell = true, profitRate = 0.01) {
         if (baseSymbol === '' || quoteSymbol === '') {
-            const stock = trade.stock();
-            Object.keys(stock).forEach((quote) => {
-                Object.keys(stock[quote]).forEach((base) => {
+            const stocks = rm.getAllStocks();
+            Object.keys(stocks).forEach((quote) => {
+                Object.keys(stocks[quote]).forEach((base) => {
                     this.profit(base, quote, onlySell, profitRate);
                 });
             });
         } else {
-            const orders = trade.order(baseSymbol, quoteSymbol);
-            if (onlySell && Object.keys(orders).length === 0) {
+            const order = rm.getOrder(baseSymbol, quoteSymbol);
+            if (onlySell && Object.keys(order).length === 0) {
                 // 無訂單時不該做止盈設定
                 return;
             }
 
-            trade.profit(onlySell, baseSymbol, quoteSymbol);
+            rm.setProfitRecord(onlySell, baseSymbol, quoteSymbol);
+            onlySell && logger.log(baseSymbol, quoteSymbol, symbol, '已設定只止盈交易');
         }
 
         // todo profitRate 設定，在最後交易時檢查並決定是否賣出讓最後一單止盈獲利
@@ -99,9 +100,9 @@ class GridTrading extends StrategyProxy {
             logger.log(baseSymbol, quoteSymbol, baseSymbol, quoteSymbol, '止損清算，停止追蹤策略');
         };
         if (baseSymbol === '' || quoteSymbol === '') {
-            const stock = trade.stock();
-            Object.keys(stock).forEach((quote) => {
-                Object.keys(stock[quote]).forEach(async (base) => {
+            const stocks = rm.getAllStocks();
+            Object.keys(stocks).forEach((quote) => {
+                Object.keys(stocks[quote]).forEach(async (base) => {
                     await sellOutResult(base, quote);
                 });
             });
@@ -115,7 +116,7 @@ class GridTrading extends StrategyProxy {
      * @returns 
      */
     query() {
-        const stocks = trade.stock();
+        const stocks = rm.getAllStocks();
         const result = {};
         Object.keys(stocks).forEach((quoteSymbol) => {
             Object.keys(stocks[quoteSymbol]).forEach((baseSymbol) => {
@@ -143,9 +144,9 @@ class GridTrading extends StrategyProxy {
         }
 
         if (baseSymbol === '' || quoteSymbol === '') {
-            const stock = trade.stock();
-            Object.keys(stock).forEach((quote) => {
-                Object.keys(stock[quote]).forEach(async (base) => {
+            const stocks = rm.getAllStocks();
+            Object.keys(stocks).forEach((quote) => {
+                Object.keys(stocks[quote]).forEach(async (base) => {
                     const symbol = `${base}${quote}`;
                     trade.rsi[symbol] = { high: rsiHigh, low: rsiLow };
                     // console.log(symbol, rsiHigh, rsiLow);
@@ -165,14 +166,20 @@ class GridTrading extends StrategyProxy {
      * @param {number} funds 
      */
     fill(baseSymbol, quoteSymbol, funds) {
-        const stockFunds = trade.funds(baseSymbol, quoteSymbol);
+        const stockFunds = rm.getFunds(baseSymbol, quoteSymbol);
         funds += stockFunds;
         if (funds < 0) {
             logger.log(baseSymbol, quoteSymbol, baseSymbol, quoteSymbol, '資金為負數，填入資金失敗');
             return;
         }
 
-        trade.write(baseSymbol, quoteSymbol, funds);
+        rm.setStockRecord({
+            baseSymbol, quoteSymbol,
+            funds: funds,
+            profit: rm.getProfitStatus(baseSymbol, quoteSymbol),
+            calm: false,
+        });
+        trade.logcat(baseSymbol, quoteSymbol);
     }
 
     /**
@@ -182,8 +189,7 @@ class GridTrading extends StrategyProxy {
      * @param {number} funds 資金
      */
     async execute(baseSymbol, quoteSymbol, funds) {
-        const symbol = `${baseSymbol}${quoteSymbol}`;
-        trade.entryPrice[symbol] = 0;
+        rm.setEntryPrice(0, baseSymbol, quoteSymbol);
 
         const delaySec = 0.5;
         this.fill(baseSymbol, quoteSymbol, funds);
@@ -202,7 +208,7 @@ class GridTrading extends StrategyProxy {
             const divide = 5;
             const precision = await getSymbolPrecision(symbol);
             const stepSize = precision.stepSize * 5;// 滑點範圍: 以市價下單會買到為止，價格可能會因此滑坡買到currentPrice 更高的價格，用購入數量來修正 (倉位價格會變高，最後一倉可能不足購入)
-            quantity = trade.funds(baseSymbol, quoteSymbol) / tickerPrice / divide - stepSize;
+            quantity = rm.getFunds(baseSymbol, quoteSymbol) / tickerPrice / divide - stepSize;
         }
         await trade.buy(baseSymbol, quoteSymbol, quantity, tickerPrice, 1);
         logger.log(baseSymbol, quoteSymbol, `[ BID ] ${symbol}`);
@@ -221,26 +227,26 @@ class GridTrading extends StrategyProxy {
     async tracking() {
         await getExchangeInfo();//先載入一筆交易所資訊
 
-        await trade.read();
+        await rm.waitRead();
 
-        const stocks = trade.stock();
-        const orders = trade.order();
+        const stocks = rm.getAllStocks();
+        const orders = rm.getAllOrders();
         const fillingOrders = [];// 未完成訂單
         Object.keys(stocks).forEach((quoteSymbol) => {
             Object.keys(stocks[quoteSymbol]).forEach((baseSymbol, i) => {
-                trade.kline(baseSymbol, quoteSymbol, '4h');
+                trade.setKlineData(baseSymbol, quoteSymbol, '4h');
 
                 const symbol = `${baseSymbol}${quoteSymbol}`;
                 const tickets = orders[quoteSymbol][baseSymbol];
                 const onlySell = stocks[quoteSymbol][baseSymbol].profit ?? false;
-                trade.onlySell[symbol] = onlySell;
+                rm.setProfitRecord(onlySell, baseSymbol, quoteSymbol);//有異動才會儲存 onlySell 的線上資料
 
                 // stock
                 if (!tickets || Object.keys(tickets).length === 0) {
                     const stockFunds = stocks[quoteSymbol][baseSymbol].funds;
                     logger.log(baseSymbol, quoteSymbol, baseSymbol, quoteSymbol, '資金:', stockFunds);
                     if (stockFunds > 0) {
-                        trade.entryPrice[symbol] = 0;
+                        rm.setEntryPrice(0, baseSymbol, quoteSymbol);
 
                         trade.startTime[symbol] = Date.now();
                         trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1 + i);
@@ -255,7 +261,7 @@ class GridTrading extends StrategyProxy {
                         fillingOrders.push({ [orderId]: [baseSymbol, quoteSymbol] });
                     } else if (orderStatus === 'FILLED') {
                         const avgPrice = await trade.resultBidTicket(baseSymbol, quoteSymbol, false);
-                        trade.entryPrice[symbol] = avgPrice;
+                        rm.setEntryPrice(avgPrice, baseSymbol, quoteSymbol);
 
                         const stockFunds = stocks[quoteSymbol][baseSymbol].funds;
                         logger.log(baseSymbol, quoteSymbol, baseSymbol, quoteSymbol, '資金:', stockFunds);

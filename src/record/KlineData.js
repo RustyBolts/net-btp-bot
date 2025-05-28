@@ -118,8 +118,4 @@ class KlineData {
     }
 }
 
-module.exports = {
-    KlineData,
-    TimeInterval,
-    DelayMins,
-};
+module.exports = KlineData;
