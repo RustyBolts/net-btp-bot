@@ -6,11 +6,13 @@ const SpotLogger = require("../record/SpotLogger");
 const TradingStrategy = require("../strategy/TradingStrategy");
 const SpotTrade = require("./SpotTrade");
 const KlineData = require("../record/KlineData");
+const MarketTicket = require("./MarketTicket");
 const rm = RecordManager.getInstance();
 const logger = new SpotLogger();
 const strategy = new TradingStrategy();
 const spot = new SpotTrade();
 const kline = new KlineData();
+const ticket = new MarketTicket();
 
 class GridStrategyTrade {
     constructor() {
@@ -28,17 +30,16 @@ class GridStrategyTrade {
 
     /**
      * 下訂單後未完成，執行追蹤訂單後完成，進入交易追蹤流程
-     * @param {string} baseSymbol 
-     * @param {string} quoteSymbol 
-     * @param {object} orderTicket 
-     * @param {number} precision 
+     * @param {object[]} fillingOrders 
      */
-    newTracking(baseSymbol, quoteSymbol, orderTicket, precision) {
-        // 變更交易訂單紀錄
-        this.recordOrder(baseSymbol, quoteSymbol, orderTicket, precision);
+    resumeTicketTracking(fillingOrders) {
+        ticket.delayTicketTracking(fillingOrders, 0.5, (baseSymbol, quoteSymbol, orderTicket, precision) => {
+            // 變更交易訂單紀錄
+            this.recordOrder(baseSymbol, quoteSymbol, orderTicket, precision);
 
-        // 開始追蹤交易倉位
-        this.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1);
+            // 開始追蹤交易倉位
+            this.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1);
+        });
     }
 
     /**

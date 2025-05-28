@@ -4,12 +4,10 @@ const StrategyProxy = require("./StrategyProxy");
 const SpotLogger = require("./record/SpotLogger");
 const SpotTrade = require("./trade/SpotTrade");
 const GridStrategyTrade = require("./trade/GridStrategyTrade");
-const MarketTicket = require("./trade/MarketTicket");
 const rm = RecordManager.getInstance();
 const logger = new SpotLogger();
 const spot = new SpotTrade();
 const trade = new GridStrategyTrade();
-const ticket = new MarketTicket();
 
 class GridTrading extends StrategyProxy {
     constructor() {
@@ -276,7 +274,7 @@ class GridTrading extends StrategyProxy {
         });
 
         if (fillingOrders.length > 0) {
-            ticket.delayTicketTracking(fillingOrders, 0.5, trade.newTracking.bind(trade));
+            trade.resumeTicketTracking(fillingOrders);
         }
 
         this.notify('追蹤網格交易策略...');
