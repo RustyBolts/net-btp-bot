@@ -121,6 +121,9 @@ class TradingStrategy {
                     } else {
                         action = 'GAZE';
                     }
+                } else {
+                    // 下跌趨勢，及時止盈止損
+                    action = 'DOWN_TREND';
                 }
             }
         }
