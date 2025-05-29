@@ -50,7 +50,7 @@ class GridTrading extends StrategyProxy {
             rm.setCalmRecord(false);
             this.tracking();
         } else {
-            const avgPrice = await trade.resultBidTicket(baseSymbol, quoteSymbol, false);
+            const avgPrice = await trade.queryStockAvgPrice(baseSymbol, quoteSymbol);
             rm.setEntryPrice(avgPrice, baseSymbol, quoteSymbol);
             rm.setCalmRecord(false, baseSymbol, quoteSymbol);
             trade.delayStrategyTracking(baseSymbol, quoteSymbol, 0.5);
@@ -114,18 +114,7 @@ class GridTrading extends StrategyProxy {
      * @returns 
      */
     query() {
-        const stocks = rm.getAllStocks();
-        const result = {};
-        Object.keys(stocks).forEach((quoteSymbol) => {
-            Object.keys(stocks[quoteSymbol]).forEach((baseSymbol) => {
-                const symbol = `${baseSymbol}${quoteSymbol}`;
-                result[symbol] = {
-                    base: trade.getAvailableGoods(baseSymbol, quoteSymbol),
-                    quote: trade.getAvailableFunds(baseSymbol, quoteSymbol),
-                };
-            });
-        });
-        return result;
+        return trade.queryStocks();
     }
 
     /**
@@ -171,13 +160,7 @@ class GridTrading extends StrategyProxy {
             return;
         }
 
-        rm.setStockRecord({
-            baseSymbol, quoteSymbol,
-            funds: funds,
-            profit: rm.getProfitStatus(baseSymbol, quoteSymbol),
-            calm: false,
-        });
-        trade.logcat(baseSymbol, quoteSymbol);
+        trade.setFunds(baseSymbol, quoteSymbol, funds);
     }
 
     /**
@@ -258,7 +241,7 @@ class GridTrading extends StrategyProxy {
                     if (orderStatus === 'NEW' || orderStatus === 'PARTIALLY_FILLED') {
                         fillingOrders.push({ [orderId]: [baseSymbol, quoteSymbol] });
                     } else if (orderStatus === 'FILLED') {
-                        const avgPrice = await trade.resultBidTicket(baseSymbol, quoteSymbol, false);
+                        const avgPrice = await trade.queryStockAvgPrice(baseSymbol, quoteSymbol);
                         rm.setEntryPrice(avgPrice, baseSymbol, quoteSymbol);
 
                         const stockFunds = stocks[quoteSymbol][baseSymbol].funds;
