@@ -329,7 +329,7 @@ class TelegramCryptoBot {
                             if (high < low) {
                                 message = `RSI 輸入順序為 {high}-{low}, high不可低於low`;
                             } else {
-                                const interval = value[3] || '4h';
+                                const interval = values[3] || '4h';
                                 this.strategyProxy.rsi(cryptoSymbol.toUpperCase(), 'USDT', high, low);
                                 message = `調整交易RSI - ${symbol}: HIGH ${high} LOW ${low}, ${interval}K線圖`;
                             }
