@@ -81,10 +81,13 @@ class KlineData {
                 console.log('不支援這個間隔');
                 return;
         }
+        // todo ui 要調整可以調不同interval，但目前只讀4hr 的欄位, 只能強制清kline
+        kline.clearPrices(`${baseSymbol}${quoteSymbol}`);
     }
 
     clearPrices(symbol) {
         this.prices[symbol] = {};
+        this.updateTime[symbol] = 0;
     }
 
     async updatePrices(symbol, limit = 100) {
