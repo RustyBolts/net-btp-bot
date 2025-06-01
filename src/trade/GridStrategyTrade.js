@@ -226,7 +226,7 @@ class GridStrategyTrade {
                     if (hours > i * 4) stopLoss = percentage > 0.03 - 0.005 * i;
                     if (stopLoss) break;
                 }
-                stopLoss && log(hours, '止損');
+                stopLoss ? log(hours, '執行提前止盈止損') : log(hours, '延時檢查止盈止損');
             }
         }
         return stopLoss;
