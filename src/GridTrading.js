@@ -118,13 +118,14 @@ class GridTrading extends StrategyProxy {
     }
 
     /**
-     * 設定RSI追蹤
+     * 設定RSI追蹤，同時設定k圖追蹤時間間隔
      * @param {string} baseSymbol 
      * @param {string} quoteSymbol 
      * @param {number} rsiHigh 
      * @param {number} rsiLow 
+     * @param {string} interval k線圖時間間隔，輸入樣式如 1m, 5m, 15m, 1h, 4h 
      */
-    rsi(baseSymbol = '', quoteSymbol = '', rsiHigh = 70, rsiLow = 30) {
+    rsi(baseSymbol = '', quoteSymbol = '', rsiHigh = 70, rsiLow = 30, interval = '4h') {
         if (rsiHigh < 50 || rsiLow > 50) {
             console.log('暫不處理high, low 互換', rsiHigh, rsiLow);
             return;
@@ -143,6 +144,9 @@ class GridTrading extends StrategyProxy {
             const symbol = `${baseSymbol}${quoteSymbol}`;
             trade.rsi[symbol] = { high: rsiHigh, low: rsiLow };
             // console.log(symbol, rsiHigh, rsiLow);
+
+            trade.setKlineData(baseSymbol, quoteSymbol, interval);
+            trade.delayStrategyTracking(baseSymbol, quoteSymbol, 1);
         }
     }
 

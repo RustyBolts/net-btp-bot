@@ -34,8 +34,8 @@ class StrategyProxy {
             PEPEUSDT: { base: 0, quote: 4054.48884083 }
         };
     }
-    rsi(baseSymbol, quoteSymbol, rsiHigh = 70, rsiLow = 30) {
-        console.log(`Calculating RSI for ${baseSymbol} ${quoteSymbol} with ${rsiHigh} ${rsiLow}`);
+    rsi(baseSymbol, quoteSymbol, rsiHigh = 70, rsiLow = 30, interval = '4h') {
+        console.log(`Calculating RSI for ${baseSymbol} ${quoteSymbol} with ${rsiHigh} ${rsiLow}, interval: ${interval}`);
     }
 
     notifyCallback = null;

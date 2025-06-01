@@ -33,7 +33,6 @@ class GridStrategyTrade {
 
     setKlineData(baseSymbol, quoteSymbol, timeInterval = '4hr') {
         kline.setKlineInterval(`${baseSymbol}${quoteSymbol}`, timeInterval);
-        // this.delayStrategyTracking(baseSymbol, quoteSymbol, 0.1);//todo 如果外部操作，需要重新開始追蹤
     }
 
     queryStocks() {

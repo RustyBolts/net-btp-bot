@@ -322,15 +322,16 @@ class TelegramCryptoBot {
                     }
 
                     const values = split[2].split('-');
-                    if (values.length === 2) {
+                    if (values.length >= 2) {
                         const high = parseInt(values[0], 10);
                         const low = parseInt(values[1], 10);
                         if (typeof high === 'number' && typeof low === 'number') {
                             if (high < low) {
                                 message = `RSI 輸入順序為 {high}-{low}, high不可低於low`;
                             } else {
+                                const interval = value[3] || '4h';
                                 this.strategyProxy.rsi(cryptoSymbol.toUpperCase(), 'USDT', high, low);
-                                message = `調整交易RSI - ${symbol}: HIGH ${high} LOW ${low}`;
+                                message = `調整交易RSI - ${symbol}: HIGH ${high} LOW ${low}, ${interval}K線圖`;
                             }
                         } else {
                             message = `輸入 /rsi ${cryptoSymbol} ${high}-${low}\n錯誤, 需要數字`;
