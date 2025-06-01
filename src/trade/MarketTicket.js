@@ -223,7 +223,7 @@ class MarketTicket {
 
     }
 
-    getFilledAvgPrice(fills) {
+    getFilledAvgPrice(fills, precision) {
         // const totalValue = fills.map(({ price, qty }) => parseFloat(price) * parseFloat(qty));
         // const totalQty = fills.map(({ qty }) => parseFloat(qty));
         // const avgPrice = totalValue.reduce((acc, cur) => acc + cur, 0) / totalQty.reduce((acc, cur) => acc + cur, 0);
