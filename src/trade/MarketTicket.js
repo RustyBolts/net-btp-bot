@@ -151,9 +151,14 @@ class MarketTicket {
         const { orderId, transactTime, cummulativeQuoteQty, executedQty, status, side, fills } = orderTicket;
 
         // 計算交易成本與倉位
-        let baseCommission = 0;
-        let quoteCommission = 0;
-        fills.forEach(({ commissionAsset, commission }) => {
+        let totalValue = 0;
+        let totalQty = 0;
+        let baseCommission = 0; // 累計標的幣種手續費 (買入時收取)
+        let quoteCommission = 0;// 累計資金幣種手續費 (賣出時收取)
+        fills.forEach(({ price, qty, commissionAsset, commission }) => {
+            totalValue += parseFloat(price) * parseFloat(qty);
+            totalQty += parseFloat(qty);
+
             if (commissionAsset === baseSymbol) {
                 baseCommission += parseFloat(commission);
             } else if (commissionAsset === quoteSymbol) {
@@ -161,12 +166,15 @@ class MarketTicket {
             }
         });
 
+        // const price = adjustPrice(totalValue / totalQty, precision);
+        const price = totalValue / totalQty;
         const quantity = parseFloat(executedQty - baseCommission);
-        const spent = adjustPrice(parseFloat(cummulativeQuoteQty) - quoteCommission, precision) * (side === 'BUY' ? -1 : 1);
+        // const spent = adjustPrice(parseFloat(cummulativeQuoteQty) - quoteCommission, precision) * (side === 'BUY' ? -1 : 1);
+        const spent = (parseFloat(cummulativeQuoteQty) - quoteCommission) * (side === 'BUY' ? -1 : 1);
         logger.log(baseSymbol, quoteSymbol, 'orderTicket:', orderTicket);
         logger.log(baseSymbol, quoteSymbol, 'baseCommission:', baseCommission, 'quoteCommission:', quoteCommission, 'spent:', spent, 'quantity:', quantity);
+        logger.log('totalValue:', totalValue, 'totalQty:', totalQty, 'avg:', totalValue / totalQty);
 
-        const price = this.getFilledAvgPrice(fills, precision);
         const orderRecord = {
             baseSymbol, quoteSymbol, orderId,
             status, side, transactTime,
@@ -221,21 +229,6 @@ class MarketTicket {
         //     selfTradePreventionMode: 'EXPIRE_MAKER'
         //   }
 
-    }
-
-    getFilledAvgPrice(fills, precision) {
-        // const totalValue = fills.map(({ price, qty }) => parseFloat(price) * parseFloat(qty));
-        // const totalQty = fills.map(({ qty }) => parseFloat(qty));
-        // const avgPrice = totalValue.reduce((acc, cur) => acc + cur, 0) / totalQty.reduce((acc, cur) => acc + cur, 0);
-        // return avgPrice;
-
-        let totalValue = 0;
-        let totalQty = 0;
-        fills.forEach(({ price, qty }) => {
-            totalValue += parseFloat(price) * parseFloat(qty);
-            totalQty += parseFloat(qty);
-        });
-        return adjustPrice(totalValue / totalQty, precision);
     }
 
     getAvailableFunds(baseSymbol, quoteSymbol) {
