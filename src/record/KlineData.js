@@ -74,7 +74,7 @@ class KlineData {
                 this.delayMins[symbol] = DelayMins[TimeInterval.MINUTES_05];
                 break;
             case TimeInterval.HOURS_04:
-                this.delayMins[symbol] = DelayMins[TimeInterval.MINUTES_15];
+                this.delayMins[symbol] = DelayMins[TimeInterval.MINUTES_05];
                 break;
             default:
                 delete this.delayMins[symbol];
@@ -82,7 +82,7 @@ class KlineData {
                 return;
         }
         // todo ui 要調整可以調不同interval，但目前只讀4hr 的欄位, 只能強制清kline
-        kline.clearPrices(`${baseSymbol}${quoteSymbol}`);
+        this.clearPrices(symbol);
     }
 
     clearPrices(symbol) {
