@@ -37,10 +37,5 @@ class StrategyProxy {
     rsi(baseSymbol, quoteSymbol, rsiHigh = 70, rsiLow = 30, interval = '4h') {
         console.log(`Calculating RSI for ${baseSymbol} ${quoteSymbol} with ${rsiHigh} ${rsiLow}, interval: ${interval}`);
     }
-
-    notifyCallback = null;
-    notify(message) {
-        this.notifyCallback?.(message);
-    }
 }
 module.exports = StrategyProxy;

@@ -1,4 +1,5 @@
 const { getSymbolPrecision, getExchangeInfo } = require("./trade/ExchangeInfo");
+const TelegramCryptoBot = require('../src-telegram-bot/TelegramCryptoBot');
 const RecordManager = require("./record/RecordManager");
 const StrategyProxy = require("./StrategyProxy");
 const SpotLogger = require("./record/SpotLogger");
@@ -13,10 +14,8 @@ class GridTrading extends StrategyProxy {
     constructor() {
         super();
 
-        trade.notify = (message) => {
-            console.log('TG BOT:', message);
-            this.notify(message);
-        };
+        this.cryptoBot = new TelegramCryptoBot(this);
+        trade.notify = (message) => this.cryptoBot.notify(message);
     }
 
     /**
@@ -135,18 +134,23 @@ class GridTrading extends StrategyProxy {
             const stocks = rm.getAllStocks();
             Object.keys(stocks).forEach((quote) => {
                 Object.keys(stocks[quote]).forEach(async (base) => {
-                    const symbol = `${base}${quote}`;
-                    trade.rsi[symbol] = { high: rsiHigh, low: rsiLow };
-                    // console.log(symbol, rsiHigh, rsiLow);
+                    this.rsi(base, quote, rsiHigh, rsiLow, interval);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 });
             });
         } else {
             const symbol = `${baseSymbol}${quoteSymbol}`;
-            trade.rsi[symbol] = { high: rsiHigh, low: rsiLow };
-            // console.log(symbol, rsiHigh, rsiLow);
+            const rsi = { high: rsiHigh, low: rsiLow, interval: interval };
+            trade.rsi[symbol] = rsi;
+            console.log(symbol, rsiHigh, rsiLow, 'rsi:', rsi);
 
             trade.setKlineData(baseSymbol, quoteSymbol, interval);
             trade.delayStrategyTracking(baseSymbol, quoteSymbol, 1);
+
+            rm.setRsiRecord({
+                baseSymbol, quoteSymbol,
+                rsi: rsi,
+            });
         }
     }
 
@@ -213,13 +217,20 @@ class GridTrading extends StrategyProxy {
         await getExchangeInfo();//先載入一筆交易所資訊
 
         await rm.waitRead();
+        const rsiRecord = rm.getAllRsi();
+        Object.keys(rsiRecord).forEach((quoteSymbol) => {
+            Object.keys(rsiRecord[quoteSymbol]).forEach((baseSymbol) => {
+                const symbol = `${baseSymbol}${quoteSymbol}`;
+                trade.rsi[symbol] = rsiRecord[quoteSymbol][baseSymbol];
+            });
+        });
 
         const stocks = rm.getAllStocks();
         const orders = rm.getAllOrders();
         const fillingOrders = [];// 未完成訂單
         Object.keys(stocks).forEach((quoteSymbol) => {
             Object.keys(stocks[quoteSymbol]).forEach((baseSymbol, i) => {
-                trade.setKlineData(baseSymbol, quoteSymbol, '4h');
+                trade.setKlineData(baseSymbol, quoteSymbol, trade.rsi[`${baseSymbol}${quoteSymbol}`]?.interval ?? '4h');
 
                 const symbol = `${baseSymbol}${quoteSymbol}`;
                 const tickets = orders[quoteSymbol][baseSymbol];
@@ -264,7 +275,7 @@ class GridTrading extends StrategyProxy {
             trade.resumeTicketTracking(fillingOrders);
         }
 
-        this.notify('追蹤網格交易策略...');
+        this.cryptoBot.notify('追蹤網格交易策略...');
     }
 }
 

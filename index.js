@@ -1,7 +1,6 @@
 const express = require('express');
 
-const TelegramCryptoBot = require('./src-telegram-bot/TelegramCryptoBot');
-const { login, read, write, listen, applicate } = require('./src-firebase/core/FirebaseBridge');
+const { login, listen } = require('./src-firebase/core/FirebaseBridge');
 const GridTrading = require('./src/GridTrading');
 const TradeHandler = require('./src-firebase/TradeHandler');
 const { randomString } = require('./src-spot/helpers/utils');
@@ -18,7 +17,6 @@ app.listen(PORT, async () => {
 
   const userid = await login(proxyId, proxyPw);
   const strategyProxy = new GridTrading();
-  const bot = new TelegramCryptoBot(strategyProxy);
 
   // await clear('TEST', 'ONE');
   const roomId = '11111111';//randomString().toLocaleUpperCase().slice(0, 12);
@@ -27,8 +25,3 @@ app.listen(PORT, async () => {
 
   strategyProxy.tracking();
 });
-
-/**
- * https://www.npmjs.com/package/node-telegram-bot-api
- * npm i node-telegram-bot-api
- */
