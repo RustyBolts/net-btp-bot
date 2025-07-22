@@ -35,6 +35,10 @@ class RecordManager {
         this.gridTradingRecord.writeStock(data);
     }
 
+    setRsiRecord(data) {
+        this.gridTradingRecord.writeRsi(data);
+    }
+
     removeOrderRecord(data) {
         this.gridTradingRecord.delOrder(data);
     }
@@ -61,6 +65,14 @@ class RecordManager {
 
     getOrder(baseSymbol, quoteSymbol) {
         return this.gridTradingRecord.getOrders(baseSymbol, quoteSymbol);
+    }
+
+    getAllRsi() {
+        return this.gridTradingRecord.getRsi();
+    }
+
+    getRsi(baseSymbol, quoteSymbol) {
+        return this.gridTradingRecord.getRsi(baseSymbol, quoteSymbol);
     }
 
     setCalmRecord(pause, baseSymbol = '', quoteSymbol = '') {

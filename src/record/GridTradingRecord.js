@@ -4,6 +4,7 @@ class GridTradingRecord {
     constructor() {
         this.order = {};
         this.stock = {};
+        this.rsi = {};
     }
 
     async read() {
@@ -11,6 +12,7 @@ class GridTradingRecord {
         if (recordData) {
             this.order = recordData.order || {};
             this.stock = recordData.stock || {};
+            this.rsi = recordData.rsi || {};
             // console.log('read', this.order);
             // console.log('read', this.stock);
         }
@@ -20,6 +22,7 @@ class GridTradingRecord {
         write('RECORD', 'GRID_TRADING', {
             order: this.order,
             stock: this.stock,
+            rsi: this.rsi,
         });
     }
 
@@ -60,7 +63,7 @@ class GridTradingRecord {
         const { baseSymbol, quoteSymbol, profit, calm, funds } = data;
 
         // 紀錄
-        const recod = {
+        const record = {
             [quoteSymbol]: {
                 [baseSymbol]: {
                     funds: funds,
@@ -76,7 +79,33 @@ class GridTradingRecord {
         if (!this.stock[quoteSymbol][baseSymbol])
             this.stock[quoteSymbol][baseSymbol] = {};
 
-        this.stock[quoteSymbol][baseSymbol] = recod[quoteSymbol][baseSymbol];
+        this.stock[quoteSymbol][baseSymbol] = record[quoteSymbol][baseSymbol];
+        this.write();
+    }
+
+    writeRsi(data) {
+        console.log('data:', data);
+        const { baseSymbol, quoteSymbol, rsi } = data;
+        const { high, low, interval } = rsi;
+
+        // 紀錄
+        const record = {
+            [quoteSymbol]: {
+                [baseSymbol]: {
+                    high: high,
+                    low: low,
+                    interval: interval
+                }
+            }
+        };
+
+        if (!this.rsi[quoteSymbol])
+            this.rsi[quoteSymbol] = {};
+
+        if (!this.rsi[quoteSymbol][baseSymbol])
+            this.rsi[quoteSymbol][baseSymbol] = {};
+
+        this.rsi[quoteSymbol][baseSymbol] = record[quoteSymbol][baseSymbol];
         this.write();
     }
 
@@ -95,6 +124,7 @@ class GridTradingRecord {
         if (this.stock[quoteSymbol] &&
             this.stock[quoteSymbol][baseSymbol]) {
             delete this.stock[quoteSymbol][baseSymbol];
+            delete this.rsi[quoteSymbol][baseSymbol];
             this.write();
         }
     }
@@ -137,6 +167,18 @@ class GridTradingRecord {
         if (this.order[quoteSymbol] &&
             this.order[quoteSymbol][baseSymbol]) {
             return this.order[quoteSymbol][baseSymbol];
+        }
+        return {};
+    }
+
+    getRsi(baseSymbol = '', quoteSymbol = '') {
+        if (baseSymbol === '' || quoteSymbol === '') {
+            return this.rsi;
+        }
+
+        if (this.rsi[quoteSymbol] &&
+            this.rsi[quoteSymbol][baseSymbol]) {
+            return this.rsi[quoteSymbol][baseSymbol];
         }
         return {};
     }
