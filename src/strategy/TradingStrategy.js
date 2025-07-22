@@ -27,10 +27,24 @@ const SpotLogger = require("../record/SpotLogger");
 const StrategyCalculate = require("./StrategyCalculate");
 const MarketTrendChecker = require("./MarketTrendChecker");
 const DivergenceChecker = require("./DivergenceChecker");
-const e = require("express");
 const calculate = new StrategyCalculate();
 const trendChecker = new MarketTrendChecker();
 const divergenceChecker = new DivergenceChecker();
+
+// // 指標快取
+// const indicatorCache = new Map();
+// const getCached = (key, computeFn, ttl = 0) => {
+//     const now = Date.now();
+//     if (indicatorCache.has(key)) {
+//         const entry = indicatorCache.get(key);
+//         if (now - entry.timestamp < ttl) {
+//             return entry.value;
+//         }
+//     }
+//     const value = computeFn();
+//     indicatorCache.set(key, { value, timestamp: now });
+//     return value;
+// };
 
 class TradingStrategy {
 
@@ -45,9 +59,10 @@ class TradingStrategy {
      */
     determineTradeAction(log, prices, currentPrice, entryPrice = 0, options = {}) {
         const {
-            rsiLow = 30, rsiHigh = 70, maxLossPercentage = 0.05,
+            rsiLow = 30, rsiHigh = 70, maxLossPercentage = 0.05, minProfitPercentage = 0.05,
             smaPeriod = 50, emaPeriod = 20, rsiPeriod = 14,
-            macdOptions = { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 }
+            macdOptions = { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 },
+            bbPeriod = 20, bbStdDev = 2, cacheTTL = 0
         } = options;
 
         // 計算技術指標
@@ -57,13 +72,37 @@ class TradingStrategy {
         const RSI = calculate.RSI(prices, rsiPeriod);
         const bollingerBands = calculate.bollingerBands(prices);
         const { upper: upperBand, lower: lowerBand, pb: percentB } = bollingerBands;
+        // todo 想進行快取，但沒有給symbol 的話會只取一個快取資料
+        // // 檢查資料長度足夠
+        // const priceLength = prices.length;
+        // if (priceLength < Math.max(rsiPeriod, bbPeriod)) {
+        //     throw new Error(`價格數據不足，至少需要 ${Math.max(rsiPeriod, bbPeriod)} 筆資料`);
+        // }
+
+        // // 計算技術指標（含快取）
+        // const smaTrend = getCached(`SMA-${smaPeriod}-${priceLength}`, () => calculate.SMA(prices, smaPeriod), cacheTTL);
+        // const emaTrend = getCached(`EMA-${emaPeriod}-${priceLength}`, () => calculate.EMA(prices, emaPeriod), cacheTTL);
+        // const macdSignal = getCached(
+        //     `MACD-${macdOptions.fastPeriod}-${macdOptions.slowPeriod}-${macdOptions.signalPeriod}-${priceLength}`,
+        //     () => calculate.MACD(prices, macdOptions),
+        //     cacheTTL
+        // );
+        // const RSI = getCached(`RSI-${rsiPeriod}-${priceLength}`, () => calculate.RSI(prices, rsiPeriod), cacheTTL);
+        // const bollingerBands = getCached(
+        //     `BB-${bbPeriod}-${bbStdDev}-${priceLength}`,
+        //     () => calculate.bollingerBands(prices, bbPeriod, bbStdDev),
+        //     cacheTTL
+        // );
+        // const { upper: upperBand, lower: lowerBand, pb: percentB } = bollingerBands;
 
         // 背離檢查
-        const divergences = divergenceChecker.checkDivergence(prices, RSI);
-        var divergence = 'NEUTRAL';
-        if (divergences.length > 0) {
-            divergence = divergences[divergences.length - 1].type;
-        }
+        // const divergences = divergenceChecker.checkDivergence(prices, RSI, currentPrice);
+        // let divergence = [];
+        // for (const d of divergences) {
+        //     const decision = this.getDivergenceAction(d);
+        //     divergence.push(`[${decision.action}] ${d.label} → ${decision.reason}`);
+        // }
+        const divergence = this.shouldTradeWithConfirmation(prices, RSI, macdSignal, currentPrice);
 
         // log('SMA:', smaTrend, 'EMA:', emaTrend, 'MACD:', macdSignal.histogram.toFixed(8));
 
@@ -72,9 +111,11 @@ class TradingStrategy {
         const fibonacciLevels = calculate.fibonacciLevels(prices);
         const trend = trendChecker.checkTrend(prices, currentPrice, bollingerBands, rsi, smaTrend, emaTrend, macdSignal, fibonacciLevels);
 
-        log(trend, '趨勢 |', divergence, '背離');
+        // log(trend, '趨勢 |\n', divergence.join('\n'));
+        log(trend, '趨勢 |', divergence.action, divergence.reason);
         log(`RSI ${Math.abs(rsiHigh - rsi) > Math.abs(rsi - rsiLow) ? rsiLow + '↓' : rsiHigh + '↑'}:`, rsi, '| PB:', percentB);
         log(this.getPriceLevel(bollingerBands, fibonacciLevels, currentPrice, entryPrice).join('\n'));
+        log('最小獲利:', minProfitPercentage * 100, '% | 最大認賠:', maxLossPercentage * 100, '%');
 
         let action = 'HOLD';
         if (this.checkStopLoss(currentPrice, entryPrice, lowerBand, rsi, maxLossPercentage)) {
@@ -89,8 +130,8 @@ class TradingStrategy {
                     // 下跌趨勢，及時止盈止損
                     action = 'DOWN_TREND';
                 }
-                else if (trend === 'RESISTANCE') {
-                    if ((currentPrice - entryPrice) / entryPrice > 0.05) {
+                else if (trend === 'RESISTANCE' && fibonacciLevels['76.4%'] < currentPrice) {
+                    if ((currentPrice - entryPrice) / entryPrice > minProfitPercentage) {
                         action = 'SELL';
                     } else {
                         action = 'GAZE';
@@ -102,7 +143,7 @@ class TradingStrategy {
                     }
                     else if (trend === 'UPTREND' && percentB > 1.2) {
                         if (rsi > 75) {
-                            action = 'OVER_BOUGHT';
+                            action = 'SELL';
                         } else {
                             action = 'GAZE';
                         }
@@ -111,7 +152,7 @@ class TradingStrategy {
             }
         }
         else if (rsi < rsiLow) {
-            if (trend === 'SUPPORT') {
+            if (trend === 'SUPPORT' && fibonacciLevels['23.6%'] > currentPrice) {
                 action = 'BUY';
             }
             else if (trend === 'DOWNTREND' && rsi < 30) {
@@ -176,21 +217,80 @@ class TradingStrategy {
         return false;
     }
 
-    isBullish(prices, currentPrice) {
-        const fibonacciLevels = calculate.fibonacciLevels(prices);
-        // console.log('止損停止交易檢查', fibonacciLevels, currentPrice);
-        return currentPrice < fibonacciLevels['23.6%'];
+    /**
+     * 根據背離訊號回傳操作建議
+     * @param {Object} divergence - 單一背離訊號（含 type, strength, confirmation 等）
+     * @returns {Object} 包含動作建議與原因
+     */
+    // getDivergenceAction(divergence) {
+    //     const { type, strength, confirmation } = divergence;
+
+    //     if (confirmation && strength === 'STRONG') {
+    //         if (type === 'BULLISH') {
+    //             return {
+    //                 action: 'BUY',
+    //                 reason: '強烈底背離且已確認，建議進場買入'
+    //             };
+    //         } else if (type === 'BEARISH') {
+    //             return {
+    //                 action: 'SELL',
+    //                 reason: '強烈頂背離且已確認，建議清倉或放空'
+    //             };
+    //         }
+    //     }
+
+    //     if (!confirmation && strength === 'STRONG') {
+    //         return {
+    //             action: 'WATCH',
+    //             reason: '背離強度高但尚未確認，建議觀察等待突破或跌破'
+    //         };
+    //     }
+
+    //     if (confirmation && strength === 'MODERATE') {
+    //         return {
+    //             action: 'LIGHT_BUY_OR_SELL',
+    //             reason: '中等強度背離已確認，可嘗試小部位操作'
+    //         };
+    //     }
+
+    //     return {
+    //         action: 'IGNORE',
+    //         reason: '背離強度不足或尚未確認，不建議操作'
+    //     };
+    // }
+
+    /**
+     * 根據 RSI 與 MACD 的背離確認判斷交易行為
+     * @param {Array} prices - 價格序列
+     * @param {Array} rsi - RSI 指標序列
+     * @param {Array} macd - MACD 指標序列
+     * @param {number} currentPrice - 當前價格
+     * @returns {Object} - 包含操作建議與理由
+     */
+    shouldTradeWithConfirmation(prices, rsi, macd, currentPrice) {
+        const rsiSignals = divergenceChecker.checkDivergence(prices, rsi, currentPrice);
+        const macdSignals = divergenceChecker.checkDivergence(prices, macd, currentPrice);
+
+        for (const rsiSig of rsiSignals) {
+            if (!rsiSig.confirmation || rsiSig.strength === 'WEAK') continue;
+
+            const match = macdSignals.find(
+                macdSig =>
+                    macdSig.type === rsiSig.type &&
+                    macdSig.confirmation &&
+                    macdSig.strength !== 'WEAK'
+            );
+
+            if (match) {
+                return {
+                    action: rsiSig.type === 'BULLISH' ? 'BUY' : 'SELL',
+                    reason: `確認 ${rsiSig.type} 背離 (RSI & MACD)：${rsiSig.label} | ${match.label}`
+                };
+            }
+        }
+
+        return { action: 'HOLD', reason: '無確認的雙重背離訊號' };
     }
 }
 
 module.exports = TradingStrategy;
-
-/**
- * 優化建議
-    1 異常處理
-    在價格數據不足時（如小於 RSI 或布林通道的 period），應提示錯誤。
-    2 性能優化
-    如果頻繁計算指標，考慮緩存過去的計算結果，避免重複計算。
-    3 靈活配置
-    允許用戶動態配置 RSI 和布林通道的參數（例如周期和標準差倍數）。
- */

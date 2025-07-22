@@ -4,41 +4,66 @@ class DivergenceChecker {
      * 檢查價格與指標的背離訊號
      * @param {Array} prices - 歷史價格數據
      * @param {Array} indicatorValues - 技術指標數據（如 RSI 或 MACD）
+     * @param {number} currentPrice - 當前價格
      * @returns {Object} - 背離訊號資訊
      */
-    checkDivergence(prices, indicatorValues) {
+    checkDivergence(prices, indicatorValues, currentPrice) {
         const pricePeaks = this.findPeaks(prices);
         const indicatorPeaks = this.findPeaks(indicatorValues);
 
         const divergences = [];
 
-        // 比較價格與指標的高點和低點
-        for (let i = 1; i < pricePeaks.length; i++) {
-            const prevPricePeak = pricePeaks[i - 1];
-            const currPricePeak = pricePeaks[i];
+        const priceHighs = pricePeaks.filter(p => p.type === 'HIGH');
+        const indicatorHighs = indicatorPeaks.filter(p => p.type === 'HIGH');
+        const priceLows = pricePeaks.filter(p => p.type === 'LOW');
+        const indicatorLows = indicatorPeaks.filter(p => p.type === 'LOW');
 
-            const prevIndicatorPeak = indicatorPeaks[i - 1];
-            const currIndicatorPeak = indicatorPeaks[i];
+        const minHighLen = Math.min(priceHighs.length, indicatorHighs.length);
+        for (let i = 1; i < minHighLen; i++) {
+            const prevPrice = priceHighs[i - 1];
+            const currPrice = priceHighs[i];
+            const prevInd = indicatorHighs[i - 1];
+            const currInd = indicatorHighs[i];
 
-            if (!prevPricePeak || !currPricePeak || !prevIndicatorPeak || !currIndicatorPeak) {
-                continue;
+            if (currPrice.value > prevPrice.value && currInd.value < prevInd.value) {
+                const strength = this.evaluateStrength(currPrice.value - prevPrice.value, prevInd.value - currInd.value);
+                const confirmation = currentPrice < currInd.value;
+                divergences.push({
+                    type: 'BEARISH',
+                    strength,
+                    confirmation,
+                    peakType: 'HIGH',
+                    pricePeak: currPrice,
+                    indicatorPeak: currInd
+                });
             }
+        }
 
-            // 看跌背離：價格創新高，但指標下降
-            if (
-                currPricePeak.value > prevPricePeak.value &&
-                currIndicatorPeak.value < prevIndicatorPeak.value
-            ) {
-                divergences.push({ type: 'BEARISH', pricePeak: currPricePeak, indicatorPeak: currIndicatorPeak });
-            }
+        const minLowLen = Math.min(priceLows.length, indicatorLows.length);
+        for (let i = 1; i < minLowLen; i++) {
+            const prevPrice = priceLows[i - 1];
+            const currPrice = priceLows[i];
+            const prevInd = indicatorLows[i - 1];
+            const currInd = indicatorLows[i];
 
-            // 看漲背離：價格創新低，但指標上升
-            if (
-                currPricePeak.value < prevPricePeak.value &&
-                currIndicatorPeak.value > prevIndicatorPeak.value
-            ) {
-                divergences.push({ type: 'BULLISH', pricePeak: currPricePeak, indicatorPeak: currIndicatorPeak });
+            if (currPrice.value < prevPrice.value && currInd.value > prevInd.value) {
+                const strength = this.evaluateStrength(prevPrice.value - currPrice.value, currInd.value - prevInd.value);
+                const confirmation = currentPrice > currInd.value;
+                divergences.push({
+                    type: 'BULLISH',
+                    strength,
+                    confirmation,
+                    peakType: 'LOW',
+                    pricePeak: currPrice,
+                    indicatorPeak: currInd
+                });
             }
+        }
+
+        for (const div of divergences) {
+            const sign = div.type === 'BULLISH' ? '↗' : '↘';
+            const conf = div.confirmation ? '✓已確認' : '!未確認';
+            div.label = `${sign} ${div.type} 背離（${div.peakType}）：${div.strength} ${conf}`;
         }
 
         return divergences;
@@ -59,6 +84,19 @@ class DivergenceChecker {
             }
         }
         return peaks;
+    }
+
+    /**
+     * 
+     * @param {number} priceDelta 價格變化
+     * @param {number} indicatorDelta 指標變化
+     * @returns 
+     */
+    evaluateStrength(priceDelta, indicatorDelta) {
+        const score = Math.abs(priceDelta) + Math.abs(indicatorDelta);
+        if (score > 20) return 'STRONG';
+        if (score > 10) return 'MODERATE';
+        return 'WEAK';
     }
 }
 
