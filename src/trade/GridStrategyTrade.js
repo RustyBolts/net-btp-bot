@@ -17,7 +17,10 @@ class GridStrategyTrade {
 
         this.rsi = {};
         this.startTime = {};// 交易對啟動時間
-        this.maxLossPercentage = 0.06;// 最大損失比例
+        this.maxLossPercentage = 0.15;// 最大損失比例
+        this.minProfitPercentage = {};// 最小獲利比例
+
+        ticket.notify = (message) => this.notify(message);
     }
 
     setFunds(baseSymbol, quoteSymbol, funds) {
@@ -31,8 +34,26 @@ class GridStrategyTrade {
         ticket.logcat(baseSymbol, quoteSymbol);
     }
 
-    setKlineData(baseSymbol, quoteSymbol, timeInterval = '4hr') {
-        kline.setKlineInterval(`${baseSymbol}${quoteSymbol}`, timeInterval);
+    setKlineData(baseSymbol, quoteSymbol, timeInterval = '4h') {
+        const symbol = `${baseSymbol}${quoteSymbol}`;
+        kline.setKlineInterval(symbol, timeInterval);
+
+        // 調整獲利限制
+        switch (timeInterval) {
+            case '5m':
+            case '15m':
+                this.minProfitPercentage[symbol] = 0.015;
+                break;
+            case '30m':
+                this.minProfitPercentage[symbol] = 0.02;
+                break;
+            case '1h':
+                this.minProfitPercentage[symbol] = 0.025;
+                break;
+            default:
+                this.minProfitPercentage[symbol] = 0.05;
+                break;
+        }
     }
 
     queryStocks() {
@@ -89,7 +110,7 @@ class GridStrategyTrade {
         var delayMins = kline.getKlineDelayMins(symbol);
         var trackType = 'strategy';
         var entryPrice = rm.getEntryPrice(baseSymbol, quoteSymbol);
-        const options = { rsiLow, rsiHigh, maxLossPercentage: this.maxLossPercentage };
+        const options = { rsiLow, rsiHigh, maxLossPercentage: this.maxLossPercentage, minProfitPercentage: this.minProfitPercentage[symbol], cacheTTL: kline.getKlineDelayMins(symbol) * 60 * 1000 };
         const {
             action,
             trend,
@@ -119,11 +140,11 @@ class GridStrategyTrade {
             log('[', action, ']', symbol);
             trackType = await this.sell(baseSymbol, quoteSymbol);
         }
-        else if (action === 'BUY' || action === 'SUPPLY') {
+        else if (action === 'BUY' || action === 'SUPPLY' || action === 'BUCKET') {
             const step = {
                 'BUY': 0.95,
                 'SUPPLY': 0.9,
-                // 'BUCKET': 0.5,
+                'BUCKET': 0.5,
             };
             const divide = 5;
             const precision = await getSymbolPrecision(symbol);
@@ -133,7 +154,7 @@ class GridStrategyTrade {
             log('[', action, ']', quantity, baseSymbol);
             trackType = await this.buy(baseSymbol, quoteSymbol, quantity, currentPrice, step[action]);
         }
-        else if (action === 'OVER_BOUGHT' || action === 'BUCKET') {
+        else if (action === 'OVER_BOUGHT') {
             log('[', action, ']', symbol);
 
             // 機器人通知
@@ -160,6 +181,7 @@ class GridStrategyTrade {
         console.log('\n');
 
         const delaySec = 60 * delayMins;
+        console.log('Delay:', delaySec, 'sec');
         if (trackType === 'ticket') {
             setTimeout(() => this.tracking(), delaySec * 1000);
         } else if (trackType === 'strategy') {
@@ -220,12 +242,12 @@ class GridStrategyTrade {
                 if (percentage <= -this.maxLossPercentage) return true;
 
                 const hours = last / (60 * 60 * 1000);
-                let i = 18;
+                let i = 36;
                 for (; i > 0; i--) {
                     if (hours > i * 4) stopLoss = percentage > 0.03 - 0.005 * i;
                     if (stopLoss) break;
                 }
-                stopLoss ? log(hours, '執行提前止盈止損') : log(hours, '延時檢查止盈止損');
+                stopLoss ? this.notify(hours, '執行提前止盈止損') : this.notify(hours, '延後檢查止盈止損');
             }
         }
         return stopLoss;
@@ -241,6 +263,7 @@ class GridStrategyTrade {
      * @returns 
      */
     async buy(baseSymbol, quoteSymbol, quantity, tickerPrice, step = 1) {
+        const symbol = `${baseSymbol}${quoteSymbol}`;
         const log = (...message) => logger.log(baseSymbol, quoteSymbol, ...message);
         if (rm.getProfitStatus(baseSymbol, quoteSymbol)) {
             log('止盈限價，不進行買入');
@@ -271,21 +294,22 @@ class GridStrategyTrade {
 
             case 'filled':
                 log('交易成功');
+                this.notify(`交易完成: ${symbol} BUY ${value}已計入倉位`);
 
                 break;
             case 'failed':
                 log('交易失敗');
-                this.notify(`交易失敗: ${symbol} ${side} ${value}訂單無法成立`);
+                this.notify(`交易失敗: ${symbol} BUY ${value}訂單無法成立`);
 
                 break;
             case 'insufficient':
                 log('資金不足');
-                this.notify(`交易失敗: ${baseSymbol} ${quoteSymbol} 可用資金無法進行交易`);
+                this.notify(`交易失敗: ${symbol} 可用資金無法進行交易`);
 
                 break;
             default:
                 log('未知錯誤');
-                break;
+                return 'stop trade';
         }
 
         return 'strategy';
@@ -298,7 +322,8 @@ class GridStrategyTrade {
      * @returns 
      */
     async sell(baseSymbol, quoteSymbol) {
-        const quantity = ticket.getAvailableGoods(baseSymbol, quoteSymbol);
+        const symbol = `${baseSymbol}${quoteSymbol}`;
+        const quantity = parseFloat(ticket.getAvailableGoods(baseSymbol, quoteSymbol).toFixed(8));
         if (quantity <= 0) {
             return 'strategy';
         }
@@ -314,23 +339,23 @@ class GridStrategyTrade {
             case 'filled':
                 log('交易成功');
 
-                const symbol = `${baseSymbol}${quoteSymbol}`;
                 if (rm.getProfitStatus(baseSymbol, quoteSymbol)) {
                     rm.setProfitRecord(false, baseSymbol, quoteSymbol);
                     this.clearTicketStock(baseSymbol, quoteSymbol);
-                    log(symbol, '止盈結算，停止追蹤策略');
+                    this.notify(`止盈結算，停止追蹤策略: ${symbol} SELL ${value}已完成清倉`);
                     return 'stop trade';
                 }
+                this.notify(`交易完成: ${symbol} SELL ${quantity}已完成清倉`);
 
                 break;
             case 'failed':
                 log('交易失敗');
-                this.notify(`交易失敗: ${symbol} ${side} ${quantity}訂單無法成立`);
+                this.notify(`交易失敗: ${symbol} SELL ${quantity}訂單無法成立`);
 
                 break;
             case 'insufficient':
                 log('資金不足');
-                this.notify(`交易失敗: ${baseSymbol} ${quoteSymbol} 倉位不足無法進行交易`);
+                this.notify(`交易失敗: ${symbol} 倉位不足無法進行交易`);
 
                 break;
             default:
