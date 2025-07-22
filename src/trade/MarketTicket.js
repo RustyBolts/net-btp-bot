@@ -83,7 +83,7 @@ class MarketTicket {
             return 'insufficient';
         }
         if (spotBalance.free < quantity) {
-            logger.log(baseSymbol, quoteSymbol, `可用${baseSymbol}餘額不足`);
+            logger.log(baseSymbol, quoteSymbol, `可用${baseSymbol}餘額不足: ${spotBalance.free}/${quantity}`);
             return 'insufficient';
         }
 
@@ -173,7 +173,7 @@ class MarketTicket {
         const spent = (parseFloat(cummulativeQuoteQty) - quoteCommission) * (side === 'BUY' ? -1 : 1);
         logger.log(baseSymbol, quoteSymbol, 'orderTicket:', orderTicket);
         logger.log(baseSymbol, quoteSymbol, 'baseCommission:', baseCommission, 'quoteCommission:', quoteCommission, 'spent:', spent, 'quantity:', quantity);
-        logger.log('totalValue:', totalValue, 'totalQty:', totalQty, 'avg:', totalValue / totalQty);
+        logger.log(baseSymbol, quoteSymbol, 'totalValue:', totalValue, 'totalQty:', totalQty, 'avg:', totalValue / totalQty);
 
         const orderRecord = {
             baseSymbol, quoteSymbol, orderId,
@@ -384,6 +384,10 @@ class MarketTicket {
     }
 
     //#endregion
+
+    notify(message) {
+        console.log(`ticket console message: ${message}`);
+    }
 }
 
 module.exports = MarketTicket;
