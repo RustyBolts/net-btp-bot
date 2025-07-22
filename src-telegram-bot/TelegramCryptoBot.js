@@ -1,4 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
+const TelegramCryptoBotCommands = require('./TelegramCryptoBotCommands');
+const { read, write } = require('../src-firebase/core/FirebaseBridge');
 
 require('dotenv').config();
 const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -8,6 +10,15 @@ class TelegramCryptoBot {
     constructor(strategyProxy) {
         this.strategyProxy = strategyProxy;
         this.loginedPlayers = {};
+        this.init();
+    }
+
+    async init() {
+        const recordData = await read('RECORD', 'TG_VERIFY');
+        if (recordData) {
+            this.loginedPlayers = recordData;
+        }
+
         this.verify();
         this.query();
         this.execute();
@@ -19,12 +30,14 @@ class TelegramCryptoBot {
         this.tracking();
         this.ip();
         this.rsi();
+        this.help();
+    }
 
-        this.strategyProxy.notifyCallback = (message) => {
-            Object.keys(this.loginedPlayers).forEach(chatId => {
-                bot.sendMessage(chatId, message);
-            });
-        };
+    notify(message) {
+        console.log('send tg message:', message);
+        Object.keys(this.loginedPlayers).forEach(chatId => {
+            bot.sendMessage(chatId, message);
+        });
     }
 
     verify() {
@@ -36,7 +49,8 @@ class TelegramCryptoBot {
             if (password === process.env.PASSWORD) {
                 bot.sendMessage(chatId, `${msg.chat.first_name} 證驗通過`);
 
-                this.loginedPlayers[chatId] = true;
+                this.loginedPlayers[chatId] = msg.chat.first_name;
+                write('RECORD', 'TG_VERIFY', this.loginedPlayers);
             } else {
                 bot.sendMessage(chatId, '驗證錯誤');
             }
@@ -329,8 +343,8 @@ class TelegramCryptoBot {
                             if (high < low) {
                                 message = `RSI 輸入順序為 {high}-{low}, high不可低於low`;
                             } else {
-                                const interval = values[3] || '4h';
-                                this.strategyProxy.rsi(cryptoSymbol.toUpperCase(), 'USDT', high, low);
+                                const interval = split[3] || '4h';
+                                this.strategyProxy.rsi(cryptoSymbol.toUpperCase(), 'USDT', high, low, interval);
                                 message = `調整交易RSI - ${symbol}: HIGH ${high} LOW ${low}, ${interval}K線圖`;
                             }
                         } else {
@@ -371,6 +385,36 @@ class TelegramCryptoBot {
             bot.sendMessage(chatId, message);
         });
     }
+
+    help() {
+        const cmd = '/help';
+        bot.onText(cmd, async (msg) => {
+            const chatId = msg.chat.id;
+
+            let message = '先驗證身份後再輸入指令';
+            if (this.loginedPlayers[chatId]) {
+                const split = msg.text.split(' ');
+                const cmd = split[1];
+
+                if (cmd === 'sync-commands') {
+                    const responseData = await new TelegramCryptoBotCommands().setBotCommands();
+                    if (responseData.ok && responseData.result) {
+                        message = ' 指令提示更新完成';
+                    } else {
+                        message = ' 指令提示更新失敗';
+                    }
+                } else {
+                    message = '輸入格式為 /command <所需參數>';
+                }
+            }
+            bot.sendMessage(chatId, message);
+        });
+    }
 }
 
 module.exports = TelegramCryptoBot;
+
+/**
+ * https://www.npmjs.com/package/node-telegram-bot-api
+ * npm i node-telegram-bot-api
+ */
