@@ -134,7 +134,7 @@ class GridStrategyTrade {
         ) {
             log('[', action, ']', symbol, '止損出清流程');
             trackType = await this.sell(baseSymbol, quoteSymbol);
-            this.notify(`${symbol}執行止損,止損價格:${currentPrice.toFixed(2)} ${quoteSymbol}`);
+            this.notify(`${action} ${symbol}執行止損,止損價格:${currentPrice.toFixed(2)} ${quoteSymbol}`);
         }
         else if (action === 'SELL') {
             log('[', action, ']', symbol);
@@ -178,10 +178,8 @@ class GridStrategyTrade {
             currentPrice, entryPrice,
         }));
 
-        console.log('\n');
-
         const delaySec = 60 * delayMins;
-        console.log('Delay:', delaySec, 'sec');
+        console.log('Delay:', delaySec, 'sec\n');
         if (trackType === 'ticket') {
             setTimeout(() => this.tracking(), delaySec * 1000);
         } else if (trackType === 'strategy') {
@@ -247,7 +245,7 @@ class GridStrategyTrade {
                     if (hours > i * 4) stopLoss = percentage > 0.03 - 0.005 * i;
                     if (stopLoss) break;
                 }
-                stopLoss ? this.notify(hours, '執行提前止盈止損') : this.notify(hours, '延後檢查止盈止損');
+                stopLoss ? this.notify(`${hours} 小時執行提前止盈止損`) : log(`${hours} 小時延後檢查止盈止損`);
             }
         }
         return stopLoss;
