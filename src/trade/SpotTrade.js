@@ -1,15 +1,15 @@
-// const { Console } = require("console");
-// const fs = require("fs");
-// const output = fs.createWriteStream("./logs/spot-stdout.log");
-// const errorOutput = fs.createWriteStream("./logs/spot-stderr.log");
-// const logger = new Console({ stdout: output, stderr: errorOutput });
+const { Console } = require("console");
+const fs = require("fs");
+const output = fs.createWriteStream("./logs/spot-stdout.log");
+const errorOutput = fs.createWriteStream("./logs/spot-stderr.log");
+const logger = new Console({ stdout: output, stderr: errorOutput });
 const { getTimestamp } = require('./ExchangeInfo');
 const Spot = require('../../src-spot/spot');
 require('dotenv').config();
 const apiKey = process.env.API_KEY;
 const secretKey = process.env.SECRET_KEY;
-const client = new Spot(apiKey, secretKey, {});
-// const client = new Spot(apiKey, secretKey, { logger: logger });
+// const client = new Spot(apiKey, secretKey, {});
+const client = new Spot(apiKey, secretKey, { logger: logger });
 
 class SpotTrade {
 
@@ -23,7 +23,7 @@ class SpotTrade {
             const result = await client.account({
                 timestamp: getTimestamp()
             });
-            // client.logger.log(result.data);
+            client.logger.log(result.data);
 
             // 設定最小資產閾值，過濾小額資產
             const minAssetThreshold = 0.0001;
@@ -43,7 +43,7 @@ class SpotTrade {
             }
             return balances;
         } catch (error) {
-            // client.logger.error(error);
+            client.logger.error(error);
         }
     }
 
@@ -53,10 +53,10 @@ class SpotTrade {
                 quantity: amount,
                 timestamp: getTimestamp()
             });
-            // client.logger.log("Spot Trade Result:\n", result.data, "\n");
+            client.logger.log("Spot Trade Result:\n", result.data, "\n");
             return result.data;
         } catch (error) {
-            // client.logger.error("Error in spot trading:", error);
+            client.logger.error("Error in spot trading:", error);
             // console.log(error.data.code);
             // console.log(error.data.msg);
             // -2015: Invalid API-key, IP, or permissions for action
@@ -75,7 +75,7 @@ class SpotTrade {
             });
             return order;
         } catch (error) {
-            // client.logger.error(error);
+            client.logger.error(error);
         }
     }
 
@@ -84,20 +84,20 @@ class SpotTrade {
             const result = await client.klines(symbol, interval, {
                 limit: limit,
             });
-            // client.logger.log("Klines Result:\n", result.data, "\n");
+            client.logger.log("Klines Result:\n", result.data, "\n");
             return result.data;
         } catch (error) {
-            // client.logger.error(error);
+            client.logger.error(error);
         }
     }
 
     async getTickerPrice(symbol) {
         try {
             const result = await client.tickerPrice(symbol);
-            // client.logger.log("Ticker Price:", result.data);
+            client.logger.log("Ticker Price:", result.data);
             return parseFloat(result.data.price);
         } catch (error) {
-            // client.logger.error(error);
+            client.logger.error(error);
         }
     }
 }
