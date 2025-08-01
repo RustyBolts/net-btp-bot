@@ -117,6 +117,9 @@ class TradingStrategy {
         log(this.getPriceLevel(bollingerBands, fibonacciLevels, currentPrice, entryPrice).join('\n'));
         log('最小獲利:', minProfitPercentage * 100, '% | 最大認賠:', maxLossPercentage * 100, '%');
 
+        // 是否符合快速獲利模式
+        const isQuickProfit = minProfitPercentage <= 0.02;
+
         let action = 'HOLD';
         if (this.checkStopLoss(currentPrice, entryPrice, lowerBand, rsi, maxLossPercentage)) {
             action = 'STOP_LOSS';
@@ -130,7 +133,7 @@ class TradingStrategy {
                     // 下跌趨勢，及時止盈止損
                     action = 'DOWN_TREND';
                 }
-                else if (trend === 'RESISTANCE' && fibonacciLevels['76.4%'] < currentPrice) {
+                else if ((trend === 'RESISTANCE' || isQuickProfit) && fibonacciLevels['76.4%'] < currentPrice) {
                     if ((currentPrice - entryPrice) / entryPrice > minProfitPercentage) {
                         action = 'SELL';
                     } else {
@@ -152,7 +155,10 @@ class TradingStrategy {
             }
         }
         else if (rsi < rsiLow) {
-            if (trend === 'SUPPORT' && fibonacciLevels['23.6%'] > currentPrice) {
+            if (trend === 'OVERSOLD') {
+                action = 'DOWN_TREND';
+            }
+            else if ((trend === 'SUPPORT' || isQuickProfit) && fibonacciLevels['23.6%'] > currentPrice) {
                 action = 'BUY';
             }
             else if (trend === 'DOWNTREND' && rsi < 30) {
@@ -209,10 +215,10 @@ class TradingStrategy {
         }
 
         // 檢查是否跌破布林通道下軌並 RSI 過低
-        if (currentPrice < lowerBand && rsi < 20) {
-            console.log('認賠觸發: 價格跌破布林通道下軌，且 RSI 過低');
-            return true;
-        }
+        // if (currentPrice < lowerBand && rsi < 20) {
+        //     console.log('認賠觸發: 價格跌破布林通道下軌，且 RSI 過低');
+        //     return true;
+        // }
 
         return false;
     }
